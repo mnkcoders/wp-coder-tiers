@@ -485,15 +485,16 @@ class CoderTiersInput{
 add_action('init', function () {
     // Bootstrap
     CoderTiers::instance();
-
+    /// REQUEST ACCESS TO THE CURRENT SERVICE/RESOURCE
     add_filter('coder_acl', function( $tier = '' ){
+        //IMPORT THE CURRENT LOADED ROLE, EMPTY BY DEFAULT
         $role = apply_filters('coder_tier', function($role = ''){
             //catch the session loaded tier by other plugins
             return $role;
         });
         return CoderTiers::instance()->tier($role)->can($tier);
     });
-    
+    //LIST ALL AVAILABLE TIERS DEFINED IN TIERS PLUGIN
     add_filter('coder_tiers', function(){
         return CoderTiers::instance()->tiers();
     }, 10, 0);
