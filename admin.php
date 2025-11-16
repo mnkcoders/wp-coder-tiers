@@ -1,4 +1,4 @@
-<?php namespace CODERS\Tiers;
+<?php namespace CODERS\Tiers\Admin;
 
 defined('ABSPATH') or die;
 
@@ -8,16 +8,34 @@ add_action('admin_menu', function () {
             __('Coder Tiers','coder_tiers'),
             'manage_options',
             'coder-tiers',
-            function () { \CODERS\Tiers\Controller::run(); },
-            'dashicons-screenoptions', 40
+            function () { \CODERS\Tiers\Admin\Controller::run(); },
+            'dashicons-admin-network', 40
     );    
 });
 add_action('admin_post_coder_tiers_save', function () {
-    \CODERS\Tiers\Controller::run('save');
+    \CODERS\Tiers\Admin\Controller::run('save');
 });
 add_action('admin_post_coder_tiers_create', function () {
-    \CODERS\Tiers\Controller::run('create');
+    \CODERS\Tiers\Admin\Controller::run('create');
 });
+add_action('admin_enqueue_scripts',function(){
+    $style = sprintf('%shtml/content/style.css', CODER_TIERS_URL);
+    $style_path = sprintf('%shtml/content/style.css', CODER_TIERS_DIR);
+    
+    $script = sprintf('%shtml/content/script.js', CODER_TIERS_URL);
+    $script_path = sprintf('%shtml/content/script.js', CODER_TIERS_DIR);
+    // Register and enqueue CSS
+    wp_enqueue_style('tiers-admin-style', $style, [], filemtime($style_path));
+    // Register and enqueue JS
+    wp_enqueue_script('tiers-admin-script', $script, ['jquery'], filemtime($script_path), true);
+
+    // Optional: Pass variables to JS
+    wp_localize_script('tiers-admin-script', 'CoderTiers', [
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('coder_nonce')
+    ]);
+});
+
 
 /**
  * 
@@ -26,35 +44,35 @@ class Controller {
     /**
      * @var array
      */
-    private static $_mailbox = array();
+    private static $_log = array();
     
     /**
      * @return string
      */
-    public static function mailbox(){
-        return self::$_mailbox; 
+    public static function log(){
+        return self::$_log; 
     }
     /**
      * @param string $content
      * @param string $type
      */
     public static function notify($content = '' , $type = 'info'){
-        self::$_mailbox[] = array('content' => $content , 'type' => $type );
+        self::$_log[] = array('content' => $content , 'type' => $type );
     }
 
 
     /**
-     * @return \CoderTiers
+     * @return \CODERS\Tiers\CoderTiers
      */
-    public static function content(){
-        return \CoderTiers::instance();
+    public static function manager(){
+        return \CODERS\Tiers\CoderTiers::instance();
     }
     /**
      * @param string $action
      * @return bool
      */
     private function action(){
-        $input = CoderTiersInput::request();
+        $input = Input::request();
         $action = $input->action;
         $call = sprintf('%sAction', strlen($action) ? $action : 'default' );
         return method_exists($this, $call) ?
@@ -119,7 +137,7 @@ class Controller {
 /**
  * 
  */
-class CoderTiersInput{
+class Input{
     
     const POST = INPUT_POST;
     const GET = INPUT_GET;
@@ -214,25 +232,24 @@ class CoderTiersInput{
        return !empty($name) ? filter_input(INPUT_SERVER, $name) ?? '' : '';
    }
    /**
-    * @return \CoderTiersInput
+    * @return \CODERS\Tiers\Admin\Input
     */
    public static function get() {
-       return new CoderTiersInput(self::GET);
+       return new Input(self::GET);
    }
    /**
-    * @return \CoderTiersInput
+    * @return \CODERS\Tiers\Admin\Input
     */
    public static function request(){
-       return new CoderTiersInput(self::REQUEST);
+       return new Input(self::REQUEST);
    }
    /**
-    * @return \CoderTiersInput
+    * @return \CODERS\Tiers\Admin\Input
     */
    public static function post(){
-       return new CoderTiersInput(self::POST);
+       return new Input(self::POST);
    }
 }
-
 /**
  * 
  */
@@ -257,7 +274,7 @@ class View{
     }
     /**
      * @param string $context
-     * @return \CODERS\Tiers\View
+     * @return \CODERS\Tiers\Admin\View
      */
     public static function create( $context = '' ){
         return new View($context);
@@ -277,12 +294,6 @@ class View{
         return !empty($view) ? sprintf('%s/html/%s.php', CODER_TIERS_DIR, $view) : '';
     }
 
-    /**
-     * @return \CoderTiers
-     */
-    private function content(){
-        return \CoderTiers::instance();
-    }
     /**
      * @param string $name
      * @return mixed
@@ -354,7 +365,7 @@ class View{
      * @return Array[]
      */
     protected function listTiers() {
-        $tiers = Controller::content()->tiers();
+        $tiers = Controller::manager()->tiers();
         return $tiers;
     }
     /**
@@ -362,8 +373,9 @@ class View{
      * @return array
      */
     protected function listAvailable( $tier = '' ){
-        $selected = array_keys($this->content()->tiers());
-        $roles = $this->content()->roles($tier);
+        $manager = Controller::manager();
+        $selected = array_keys($manager->tiers());
+        $roles = $manager->roles($tier);
         $available = array();
         foreach( $selected as $t ){
             if( $tier !== $t && !in_array($t, $roles)){
@@ -377,10 +389,10 @@ class View{
      * @return array
      */
     protected function listMessages(){
-        return Controller::mailbox();
+        return Controller::log();
     }
     /**
-     * @return \CODERS\Tiers\View
+     * @return \CODERS\Tiers\Admin\View
      */
     protected function viewMessages(){
         foreach( $this->listMessages() as $message ){

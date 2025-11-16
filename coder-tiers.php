@@ -1,4 +1,4 @@
-<?php
+<?php namespace CODERS\Tiers;
 defined('ABSPATH') || exit;
 /**
  * Plugin Name: Coder Tiers
@@ -8,39 +8,51 @@ defined('ABSPATH') || exit;
  * Text Domain: coder_tiers
  */
 define('CODER_TIERS_DIR', plugin_dir_path(__FILE__));
+define('CODER_TIERS_URL', plugin_dir_url(__FILE__));
 
 // Activation hook
 register_activation_hook(__FILE__, function(){
-    CoderTiers::install();
+    \CODERS\Tiers\CoderTiers::install();
 });
 register_deactivation_hook(__FILE__, function(){
-    CoderTiers::uninstall();
+    \CODERS\Tiers\CoderTiers::uninstall();
 });
 
 add_action('init', function () {
     // Bootstrap
-    CoderTiers::instance();
+    \CODERS\Tiers\CoderTiers::instance();
     /// REQUEST ACCESS TO THE CURRENT SERVICE/RESOURCE
-    add_filter('coder_acl', function( $tier = '' ){
+    add_filter('coder_acl', function( $ignore = false , $tier = '' ){
         //IMPORT THE CURRENT LOADED ROLE, EMPTY BY DEFAULT
         $role = apply_filters('coder_role', '');
         //var_dump([$role,$tier]);
-        return CoderTiers::instance()->tier($role)->can($tier);
-    });
+        return \CODERS\Tiers\CoderTiers::instance()->tier($role)->can($tier);
+    } , 10 , 2);
     //LIST ALL AVAILABLE TIERS DEFINED IN TIERS PLUGIN
     add_filter('coder_tiers', function(){
-        return CoderTiers::instance()->list();
-    }, 10, 0);
+        return \CODERS\Tiers\CoderTiers::instance()->list();
+    }, 10, 1);
 
     if (is_admin()) {
         // Admin hooks
         require_once sprintf('%s/admin.php',CODER_TIERS_DIR);
     }
     
-    //add_filter('coder_role', function(){ return 'diamond'; } );
-    //var_dump(apply_filters('coder_acl', 'obsidian'));
-    //die;    
+    //coder_tiers_test();
 });
+
+function coder_tiers_test(){
+    
+    
+    add_filter('coder_role', function(){ return 'diamond'; } );
+    //add_filter('coder_role', function(){ return 'silver'; } );
+    //add_filter('coder_role', function(){ return 'quicksilver'; } );
+    
+    var_dump(apply_filters('coder_role',''));
+    var_dump(apply_filters('coder_acl', 'obsidian'));
+    var_dump(apply_filters('coder_tiers', array()));
+    die;
+}
 
 
 /**
@@ -61,12 +73,12 @@ class CoderTiers {
 
     /**
      * @param bool $map
-     * @return String[]|\CoderTier
+     * @return String[]|\CODERS\Tiers\Tier
      */
     public function tiers( $map = false ) {
         return $map ?
                 array_map(function($tier){
-                    return new CoderTier($tier);
+                    return new Tier($tier);
                 }, array_keys( $this->_tiers ) ):
                 $this->_tiers;
     }
@@ -97,15 +109,15 @@ class CoderTiers {
     }
     /**
      * @param String $tier
-     * @return \CoderTier
+     * @return \CODERS\Tiers\Tier
      */
     public function tier( $tier = '' ){
-        return new CoderTier($tier,true);
+        return new Tier($tier,true);
     }
     
 
     /**
-     * @return \CoderTiers
+     * @return \CODERS\Tiers\CoderTiers
      */
     public static function instance() {
         if (null === self::$instance) {
@@ -136,7 +148,6 @@ class CoderTiers {
 
         $sql = "CREATE TABLE IF NOT EXISTS {$table} (
             tier VARCHAR(24) NOT NULL,
-            title VARCHAR(32) NOT NULL,
             roles VARCHAR(256) DEFAULT '',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (tier),
@@ -160,7 +171,7 @@ class CoderTiers {
             foreach ($rows as $r) {
                 $tiers[$r['tier']] = array(
                     'tier' => $r['tier'],
-                    'title' => $r['title'],
+                    //'title' => $r['title'],
                     'roles' => array_filter(explode(':',$r['roles'])),
                 );
             }
@@ -171,7 +182,7 @@ class CoderTiers {
 /**
  * 
  */
-class CoderTier{
+class Tier{
     /**
      * @var String
      */
@@ -179,7 +190,7 @@ class CoderTier{
     /**
      * @var String[]
      */
-    private $_tiers = array();
+    private $_roles = array();
     /**
      * @param String $tier
      * @param bool $preload
@@ -189,30 +200,58 @@ class CoderTier{
         $this->_tier = $tier;
         
         if( $preload ){
-            $this->load($this->tier(), $this->_tiers);
+            $this->load($this->tier(), $this->_roles);
         }
         else{
             $this->manager()->roles($this->tier());
         }
     }
     /**
-     * @return \CoderTiers
+     * @param string $name
+     * @return string
      */
-    private function manager(){
-        return \CoderTiers::instance();
+    public function __get( $name ){
+        $get = sprintf('get%s', ucfirst($name));
+        return method_exists($this, $get) ? $this->$get() : '';
     }
     /**
-     * @return \CoderTiers
+     * @return string
      */
-    private function tierdata(){
-        return $this->manager()->tiers();
+    public function getName(){
+        return $this->_tier;
+    }
+    /**
+     * @return string
+     */
+    public function getTitle(){
+        return ucfirst($this->_tier);
+    }
+    /**
+     * @return string
+     */
+    public function getRoles(){
+        return implode(', ', $this->_roles);
+    }
+    /**
+     * @return array
+     */
+    public function listRoles(){
+        return $this->roles();
+    }
+
+    
+    /**
+     * @return \CODERS\Tiers\CoderTiers
+     */
+    private function manager(){
+        return \CODERS\Tiers\CoderTiers::instance();
     }
     /**
      * @param String $tier
      * @param String[] $list
      */
     private function load( $tier = '' , &$list = array() ){
-        $db = $this->tierdata();
+        $db = $this->manager()->tiers();
         if( !in_array($tier, $list)){
             if( $tier !== $this->tier()){
                 $list[] = $tier;
@@ -231,13 +270,13 @@ class CoderTier{
     /**
      * @return String[]
      */
-    public function tiers(){ return $this->_tiers; }
+    public function roles(){ return $this->_roles; }
     /**
      * @param String $tier
      * @return bool
      */
     public function can( $tier = ''){
-        return strlen($tier) && ($tier === $this->tier() || in_array($tier, $this->tiers()));
+        return strlen($tier) && ($tier === $this->tier() || in_array($tier, $this->roles()));
     }
 }
 
