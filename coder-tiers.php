@@ -32,6 +32,18 @@ add_action('init', function () {
     add_filter('coder_tiers', function(){
         return \CODERS\Tiers\CoderTiers::instance()->list();
     }, 10, 1);
+    
+    //include the tier list for rewards among different plugins
+    add_filter('coder_rewards',function( $rewards ){
+        if(is_array($rewards)){
+            $rewards['coder_tiers'] = array(
+                'title' => __('Rewards','coder_tiers'),
+                'type' => 'string',
+                'content' => apply_filters('coder_tiers',array()),
+            );
+        }
+        return $rewards;
+    });
 
     if (is_admin()) {
         // Admin hooks
