@@ -2,17 +2,13 @@
 
 <div class="wrap">
     <h1 class="wp-heading-inline"><?php print get_admin_page_title() ?></h1>
-
-    <?php if (isset($_GET['updated'])) : ?>
-        <div class="updated notice is-dismissible"><p>Saved!</p></div>
-    <?php endif; ?>
         <div class="coder-tiers">
         <ul class="tier-list">
             <?php foreach ($this->list_tiers as $tier) : ?>
                 <li class="item">
                     <label class="tier button-primary" data-tier="<?php
                         print $tier['tier'] ?>"><?php
-                        print $tier['title'] ?>
+                        print $tier['tier'] ?>
                     </label>
                     <?php foreach ($tier['roles'] as $role): ?>
                         <span class="role button" data-role="<?php

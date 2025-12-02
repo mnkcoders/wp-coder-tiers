@@ -30,11 +30,48 @@ add_action('admin_enqueue_scripts',function(){
     wp_enqueue_script('tiers-admin-script', $script, ['jquery'], filemtime($script_path), true);
 
     // Optional: Pass variables to JS
-    wp_localize_script('tiers-admin-script', 'CoderTiers', [
-        'ajax_url' => admin_url('admin-ajax.php'),
+    wp_localize_script('tiers-admin-script', 'CoderTierApi', [
+        'url' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('coder_nonce')
     ]);
 });
+
+add_action('wp_ajax_coder_tiers', function(){
+    \CODERS\Tiers\Admin\AjaxController::run()->send();
+    exit;
+});
+// if non-logged-in allowed:
+add_action('wp_ajax_nopriv_coder_tiers', function(){
+        \CODERS\Tiers\Admin\AjaxController::run()->send();
+    exit;
+});
+
+function coder_tiers_ajax_handler() {
+
+    $task  = sanitize_text_field($_POST['task'] ?? '');
+    $tiers = $_POST['tiers'] ?? [];
+
+    switch ($task) {
+
+        case 'tiers':
+            // Respond with list of tiers
+            wp_send_json([
+                'success' => true,
+                'tiers'   => coder_tiers_get_list(),
+            ]);
+            break;
+
+        case 'save':
+            // Save tiers to DB
+            coder_tiers_save_list($tiers);
+            wp_send_json(['success' => true]);
+            break;
+
+        default:
+            wp_send_json(['success' => false, 'msg' => 'Unknown task']);
+    }
+}
+
 
 
 /**
@@ -71,7 +108,7 @@ class Controller {
      * @param string $action
      * @return bool
      */
-    private function action(){
+    protected function action(){
         $input = Input::request();
         $action = $input->action;
         $call = sprintf('%sAction', strlen($action) ? $action : 'default' );
@@ -121,17 +158,68 @@ class Controller {
         
         return true;
     }
-    
     /**
-     * @param string $context (default to tiers)
-     * @return type
+     * @return null|\CODERS\Tiers\Admin\Controller
      */
-    public static function run( $context = 'main' ) {
+    public static function run(  ) {
         if (!current_user_can('manage_options')) {
-            return;
+            return null;
         }
-        $controller = new Controller($context);
+        $controller = new Controller();
         $controller->action( );
+        return $controller;
+    }
+}
+/**
+ * 
+ */
+class AjaxController extends Controller{
+    
+    private $_response = array();
+    /**
+     * @param array $data
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    private function fill( array $data = array()) {
+        $this->_response = $data;
+        return $this;
+    }
+    /**
+     * @return ARray
+     */
+    public function response() {
+        return $this->_response;
+    }
+    /**
+     * 
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    public function send() {
+        wp_send_json($this->response());
+        return $this;
+    }
+    /**
+     * 
+     * @param Input $input
+     * @return bool
+     */
+    protected function tiersAction(Input $input = null ) {
+        $tiers = array();
+        foreach ( self::manager()->tiers(true) as $tier ){
+            $tiers = $tier->data();
+        }
+        $this->fill(array('tiers'=>$tiers));
+        return true;
+    }
+
+
+    /**
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    public static function run() {
+        $controller =  new AjaxController();
+        $controller->action(Input::ajax());
+        return $controller;
     }
 }
 /**
@@ -248,6 +336,17 @@ class Input{
     */
    public static function post(){
        return new Input(self::POST);
+   }
+   /**
+    * @return \CODERS\Tiers\Admin\Input
+    */
+   public static function ajax() {
+       $request = self::post();
+       if( $request->has('task')){
+            $request->_input['action'] = $request->task;
+            unset($request->_input['task']);
+       }
+       return $request;
    }
 }
 /**

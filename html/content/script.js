@@ -1,310 +1,370 @@
-/**
- * TEST THIS GPT PROPOSAL.
- * PREPARE THE SERVER'S AJAX RESPONSE TO:
- * task: 'tiers'
- * send: CoderTier[...]
- */
+document.addEventListener('DOMContentLoaded',function(){
 
-document.addEventListener('DOMContentLoaded', function () {
-    CoderTiers.instance();
+    CoderTiers.create('tier-list');
+
 });
 
 
 /**
- * ============================================================
- *  MAIN CLIENT MANAGER
- * ============================================================
+ * Main Client Tier Manager class 
  */
-class CoderTiers {
+class CoderTiers{
+    /**
+     * 
+     * @param {String} container 
+     * @returns {CoderTiers}
+     */
+    constructor( container = '' ){
 
-    constructor(container = 'coder-tiers') {
-
-        if (CoderTiers.__instance) {
+        if( CoderTiers.__instance){
             return CoderTiers.__instance;
         }
-
         CoderTiers.__instance = this;
 
-        this.initialize(container);
+        this._view = new CoderBlueprint(container);
+        this._client = new CoderClient( CoderTierApi || null );
+
+        this.initialize();
+
+        console.log(this);
+    }
+    /**
+     * 
+     */
+    initialize(  ){
+        this._tiers = [];
         this.fill();
     }
-
-    initialize(container = '') {
-        this._view = new CoderBlueprint(container);
-        this._client = new CoderClient();
-        this._tiers = [];
-    }
-
-    fill() {
-        this.client().request('tiers', response => {
-
-            const tiers = (response?.tiers || []).map(row =>
-                new CoderTier(row.tier, row.roles)
-            );
-
-            this._tiers = tiers;
-            this.view().refresh(tiers, true);
+    /**
+     * @returns {CoderTiers}
+     */
+    fill(){
+        this.client().request( 'tiers' , response => {
+            const tiers = response && response.tiers && response.tiers.map( data => new CoderTier(...Object.values(data))) || [];
+            tiers.forEach( t => this.add(t ));
+            this.view().refresh(tiers,true);
         });
         return this;
     }
-
-    client() { return this._client; }
-    view() { return this._view; }
-    tiers() { return this._tiers; }
+    /**
+     * UL list element to hold all tiers
+     * @returns {CoderBlueprint}
+     */
+    view(){ return this._view; }
+    /**
+     * @returns {CoderClient}
+     */
+    client(){ return this._client; }
+    /**
+     * @returns {CoderTier[]}
+     */
+    tiers(){ return this._tiers; }
+    /**
+     * @param {CoderTier[]} tier 
+     * @returns {CoderTiers}
+     */
+    add(tier = null ){
+        if( tier instanceof CoderTier ){
+            this.tiers().push(tier);
+        }
+        return this;
+    }
 
     /**
-     * Send new tier structure to server
+     * AJAX update call here, append all tiers to be updated in a formfield and send
+     * @param {*} tiers 
+     * @returns {CoderTiers}
      */
-    update(tiers = []) {
-        this.client().send(tiers.map(t => t.tierdata()), resp => {
-            console.log("Server updated:", resp);
-        });
+    update( tiers = [] ){
+        
         return this;
     }
 
-    static instance() {
+    /**
+     * @returns {CoderTiers}
+     */
+    static instance(){
         return CoderTiers.__instance || new CoderTiers();
     }
+    /**
+     * @param {String} content 
+     * @returns {CoderTiers}
+     */
+    static create( content = ''){
+        return new CoderTiers( content );
+    }
 }
-
-
-
 /**
- * ============================================================
- *  TIER DATA HOLDER
- * ============================================================
+ * Tier Data to handle inner tier hierarchy operations (remove duplicates, remove looping dependencies)
  */
-class CoderTier {
-
-    constructor(tier = '', roles = []) {
+class CoderTier{
+    /**
+     * @param {String} tier 
+     * @param {String[]} roles 
+     */
+    constructor( tier = '' , roles = []){
         this._tier = tier || '';
-        this._roles = Array.isArray(roles) ? roles : [];
+        this._roles = roles || [];
     }
-
-    toString() { return this._tier; }
-    tier() { return this._tier; }
-
-    roles() {
-        return this._roles.map(role => new CoderTier(role));
-    }
-
-    tierdata() {
+    /**
+     * @returns {String}
+     */
+    toString(){ return this._tier; }
+    /**
+     * @returns {String}
+     */
+    tier(){ return this._tier;}
+    /**
+     * @returns {CoderTier[]}
+     */
+    roles(){ return this._roles.map( role => new CoderTier(role)); }
+    /**
+     * Use this to append the ajax call content
+     * @returns {Object}
+     */
+    tierdata(){
         return {
             tier: this._tier,
-            roles: this._roles
+            roles: this._roles,
         };
     }
-}
-
-
-
-/**
- * ============================================================
- *  AJAX CLIENT
- * ============================================================
- */
-class CoderClient {
-
-    constructor() {
-        this.ajaxurl = window.ajaxurl || '/wp-admin/admin-ajax.php';
-        this.nonce = window.coderTiersNonce || '';
+    /**
+     * @returns {CoderTiers}
+     */
+    manager(){
+        return CoderTiers.instance();
     }
+}
+/**
+ * Handle server response here
+ */
+class CoderClient{
+    /**
+     * 
+     */
+    constructor( api = null ){
+        //define required client ajax attributes
+        this._url = api && api.url || ajaxurl || '';
+        this._nonce = api && api.nonce || '';
+        (this);
+    }
+    /**
+     * @returns {String}
+     */
+    url(){ return this._url; }
+    /**
+     * @returns {String}
+     */
+    nonce(){ return this._nonce; }
+    /**
+     * 
+     * @param {String} error 
+     */
+    error( error ){
+        console.error("AJAX error:", error);
+    }
+    /**
+     * @param {Object} data 
+     * @returns {CoderClient}
+     */
+    ajax( data = {}, callback = null ){
 
-    ajax(data = {}, callback = null) {
+        data.action = 'coder_tiers';
+        data._nonce = this.nonce();
 
-        data.action = 'coder_tiers_action';
-        data._nonce = this.nonce;
-
-        fetch(this.ajaxurl, {
+        fetch(this.url(), {
             method: 'POST',
             body: new URLSearchParams(data)
         })
         .then(r => r.json())
         .then(response => {
+            console.log(response);
             callback && callback(response);
         })
-        .catch(err => console.error("AJAX error:", err));
+        .catch(err => this.error( err ) );
+
+
+        //implement ajax call and callback
 
         return this;
     }
+    /**
+     * @param {String} action 
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    request( action = '' , callback = null){
+        //send ajax action
 
-    request(task = '', callback = null) {
-        return this.ajax({task}, callback);
+        callback && callback( this.fake());
+
+        return this.ajax( {task:action}, response => {
+            console.log(response);
+        });
+        //return this.ajax( {task:action},callback);
+    }
+    /**
+     * @returns {Object[]}
+     */
+    fake(){
+        return {tiers:[
+            {tier:'copper'},
+            {tier:'silver',roles:['copper']},
+            {tier:'gold',roles:['silver']},
+        ]};
     }
 
-    send(tiers = [], callback = null) {
-        return this.ajax({task: 'save', tiers: JSON.stringify(tiers)}, callback);
+    /**
+     * @todo implement server call and response
+     * @param {CoderTier[]} tiers 
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    send( tiers = [] , callback = null ){
+
+        return this.ajax({
+            'tiers': tiers,
+        }, callback );
     }
 }
-
-
-
 /**
- * ============================================================
- *  VIEW / BLUEPRINT HANDLER
- * ============================================================
+ * 
  */
-class CoderBlueprint {
-
-    constructor(container = '') {
-        this._content = document.querySelector('.' + container);
-        if (!this._content) {
-            console.error("CoderBlueprint: container not found:", container);
-            return;
-        }
+class CoderBlueprint{
+    /**
+     * @param {String} type 
+     * @param {Object} attributes 
+     */
+    constructor( content = '' ){
+        this._content = [...document.getElementsByClassName(content)][0] || null;
         this.initialize();
     }
 
-    initialize() {
-        // Drag drop handlers can be bound here if needed
+    initialize(){
+        //setup here all required events bound to the list element (content) if required
     }
 
-    content() { return this._content; }
-
-    list() {
-        return Array.from(this._content.querySelectorAll('li.tier'));
-    }
-
-    tiers() {
-        return this.list().map(item => item.dataset.tier);
-    }
-
-    roles(tier = '') {
-        const item = this.get(tier);
-        if (!item) return [];
-        return Array.from(item.querySelectorAll('.role'))
-                    .map(span => span.dataset.role);
-    }
 
     /**
-     * Safe element builder
+     * @returns {Element}
      */
-    html(type = 'div', attributes = {}, content = '') {
-        const el = document.createElement(type);
-        Object.entries(attributes).forEach(([k, v]) => el.setAttribute(k, v));
-        if (content) el.innerHTML = content;
-        return el;
+    content(){
+        return this._content;
     }
-
     /**
-     * Create a row in the UI
+     * Get the list's items to sync the view's contents
+     * @returns {Element[]}
      */
-    add(tierObj = null) {
-        if (!(tierObj instanceof CoderTier)) return false;
-
-        const li = this.html('li', {
-            class: 'tier',
-            'data-tier': tierObj.tier()
-        });
-
-        // Tier label
-        const label = this.html('div', {
-            class: 'tier-header',
-            draggable: 'true',
-            'data-tier': tierObj.tier()
-        }, tierObj.tier());
-
-        li.appendChild(label);
-
-        // Roles container
-        const rolesWrap = this.html('div', {class: 'tier-roles'});
-        tierObj._roles.forEach(r => {
-            const span = this.html('span', {
-                class: 'role',
-                'data-role': r,
-                draggable: 'true'
-            }, r + ' <span class="remove-role">×</span>');
-            rolesWrap.appendChild(span);
-        });
-
-        li.appendChild(rolesWrap);
-
-        // Append to list
-        this._content.appendChild(li);
-
-        return true;
-    }
-
-    get(tier = '') {
-        return this._content.querySelector(`li[data-tier="${tier}"]`);
-    }
-
-    has(tier = '') {
-        return !!this.get(tier);
-    }
-
+    list(){ return this.content() && Array.from(this.content().children) || []; }
     /**
-     * Refresh or update list
+     * List all tiers in the list view
+     * @returns {String[]}
      */
-    refresh(content = [], clear = false) {
-
-        if (clear) this.clear();
-
-        const existing = this.tiers();
-
-        // Add or update
-        content.forEach(tierObj => {
-
-            if (this.has(tierObj.tier())) {
-                this.updateTier(tierObj);
-            } else {
-                this.add(tierObj);
+    tiers(){ return this.list().map( item => item.getAttribute('data-tier')); }
+    /**
+     * List a tier's roles in the list view
+     * @param {String} tier 
+     * @returns {String[]}
+     */
+    roles( tier = '' ){
+        const item = this.list().find( item => item.getAttribute('data-tier') === tier ) || null;
+        return item && item.children().map( t => t.getAttribute('data-role') || '').filter( t => !!t);
+    }
+    /**
+     * @param {String} type
+     * @param {Object} attributes 
+     * @param {*} content 
+     * @returns {Element}
+     */
+    html( type = '', attributes = null, content = null){
+        const element = document.createElement(type);
+        attributes instanceof Object && Object.keys(attributes).forEach( att => element.setAttribute(att,attributes[att]));
+        if( type ){
+            element.id = type;
+        }
+        if( content instanceof Element){
+            element.appendChild(content);
+        }
+        else{
+            element.innerHTML = content || '';
+        }
+        return element;
+    }
+    /**
+     * @todo  implement drag-drop events on tiers and roles
+     * @param {CoderTier} content
+     * @returns {Boolean} 
+     */
+    add(content = null){
+        if( content instanceof CoderTier){
+            const item = this.html('li',{'class':'item','id':content.tier()});
+            const tier = this.html('span',{'class':'tier button-primary','data-tier':content.tier()},content.tier());
+            const roles = content.roles().map( role => this.html('span',{'class':'role button','data-role':role},role));
+            const remove = this.html('a',{'class':'remove right','href':'','target':'_self'},this.html('span',{'class':'dashicons dashicons-remove'}));
+            //add drag-drop events here
+            
+            item.appendChild(tier);
+            roles.forEach( role => item.append(role));
+            this.content().appendChild(item);
+            item.appendChild(remove);
+            return true;
+        }
+        return false;
+    }
+    /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    get( tier = '' ){ return this.list().find( item => item.id === tier ) || null; }
+    /**
+     * @param {String} tier 
+     * @returns {Boolean}
+     */
+    has( tier = '' ){ return !!this.get(tier); }
+    /**
+     * Main event to handle the tier list from server's response
+     * @todo implement update (refresh) or add new to the list
+     * @param {CoderTier[]} content 
+     * @returns {CoderBlueprint}
+     */
+    refresh( content = [] ,clear = false){
+        //fetch a tier name list
+        const list = content.map( t => t.tier());
+        //remove non existing tiers
+        console.log(content,list);
+        clear && this.clear();
+        content.forEach( tier => {
+            //get the tier's  content and rewrite it all
+            if( this.has(tier.tier())){
+                //update
+            }
+            else{
+                //add
+                this.add(tier);
             }
         });
-
-        // Remove missing tiers
-        const newList = content.map(t => t.tier());
-        const toRemove = existing.filter(t => !newList.includes(t));
-        this.clear(toRemove);
-
         return this;
     }
-
     /**
-     * Replace inner HTML for an existing tier
+     * @todo Implement remove
+     * Remove all or selected items in the list
+     * @param {String[]} tiers 
+     * @returns {CoderBlueprint}
      */
-    updateTier(tierObj) {
-        const li = this.get(tierObj.tier());
-        if (!li) return;
-
-        li.innerHTML = ""; // reset
-
-        const label = this.html('div', {
-            class: 'tier-header',
-            draggable: 'true',
-            'data-tier': tierObj.tier()
-        }, tierObj.tier());
-
-        const rolesWrap = this.html('div', {class: 'tier-roles'});
-
-        tierObj._roles.forEach(r => {
-            const span = this.html('span', {
-                class: 'role',
-                'data-role': r,
-                draggable: 'true'
-            }, r + ' <span class="remove-role">×</span>');
-            rolesWrap.appendChild(span);
-        });
-
-        li.appendChild(label);
-        li.appendChild(rolesWrap);
-    }
-
-    /**
-     * Remove tiers
-     */
-    clear(tiers = []) {
-
-        if (!tiers.length) {
-            this._content.innerHTML = '';
-            return this;
+    clear( tiers = []){
+        if( tiers.length ){
+            //remove all children in tiers list
+            tiers.forEach( t => {
+                //remove from UL content
+            } );
         }
-
-        tiers.forEach(t => {
-            const item = this.get(t);
-            item && item.remove();
-        });
-
+        else if(this.content()){
+            //reset
+            this.content().innerHTML = '';
+        }
         return this;
     }
 }
+
+
+

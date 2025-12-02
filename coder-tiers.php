@@ -100,7 +100,7 @@ class CoderTiers {
     public function list(){
         $tiers = array();
         foreach ($this->tiers() as $tier => $data ){
-            $tiers[$tier] = $data['title'];
+            $tiers[$tier] = $data['tier'];
         }
         return $tiers;
     }
@@ -283,6 +283,15 @@ class Tier{
      * @return String[]
      */
     public function roles(){ return $this->_roles; }
+    /**
+     * @return array
+     */
+    public function data() {
+        return array(
+            'tier' => $this->tier(),
+            'roles' => $this->roles()
+        );
+    }
     /**
      * @param String $tier
      * @return bool
