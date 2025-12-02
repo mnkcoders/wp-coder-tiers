@@ -285,9 +285,6 @@ class CoderBlueprint {
     html(type = '', attributes = null, content = null) {
         const element = document.createElement(type);
         attributes instanceof Object && Object.keys(attributes).forEach(att => element.setAttribute(att, attributes[att]));
-        if (type) {
-            element.id = type;
-        }
         if (content instanceof Element) {
             element.appendChild(content);
         }
@@ -312,7 +309,8 @@ class CoderBlueprint {
      */
     add(content = null) {
         if (content instanceof CoderTier) {
-            const item = this.html('li', { 'class': 'item', 'id': content.tier() });
+            const name = content.tier();
+            const item = this.html('li', { 'class': 'item', 'data-owner': name });
             const tier = this.html('span', { 'class': 'tier button-primary', 'data-tier': content.tier() }, content.tier());
             const roles = content.roles().map(role => this.html('span', { 'class': 'role button', 'data-role': role }, role));
             const removeLink = this.link('remove', content.tier());

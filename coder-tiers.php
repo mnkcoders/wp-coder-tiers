@@ -215,7 +215,7 @@ class Tier{
             $this->load($this->tier(), $this->_roles);
         }
         else{
-            $this->manager()->roles($this->tier());
+            $this->_roles = $this->manager()->roles($this->tier());
         }
     }
     /**
@@ -283,15 +283,6 @@ class Tier{
      * @return String[]
      */
     public function roles(){ return $this->_roles; }
-    /**
-     * @return array
-     */
-    public function data() {
-        return array(
-            'tier' => $this->tier(),
-            'roles' => $this->roles()
-        );
-    }
     /**
      * @param String $tier
      * @return bool

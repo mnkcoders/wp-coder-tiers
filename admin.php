@@ -9,6 +9,7 @@ add_action('admin_menu', function () {
             'manage_options',
             'coder-tiers',
             function () { \CODERS\Tiers\Admin\Controller::run(); },
+            //function () { \CODERS\Tiers\Admin\Controller::run(); },
             'dashicons-admin-network', 40
     );    
 });
@@ -37,52 +38,60 @@ add_action('admin_enqueue_scripts',function(){
 });
 
 add_action('wp_ajax_coder_tiers', function(){
-    \CODERS\Tiers\Admin\AjaxController::run()->send();
-    exit;
+    $controller = \CODERS\Tiers\Admin\AjaxController::run();
+    wp_send_json($controller->response());
 });
 // if non-logged-in allowed:
 add_action('wp_ajax_nopriv_coder_tiers', function(){
-        \CODERS\Tiers\Admin\AjaxController::run()->send();
-    exit;
+    $controller = \CODERS\Tiers\Admin\AjaxController::run();
+    wp_send_json($controller->response());
 });
-
-function coder_tiers_ajax_handler() {
-
-    $task  = sanitize_text_field($_POST['task'] ?? '');
-    $tiers = $_POST['tiers'] ?? [];
-
-    switch ($task) {
-
-        case 'tiers':
-            // Respond with list of tiers
-            wp_send_json([
-                'success' => true,
-                'tiers'   => coder_tiers_get_list(),
-            ]);
-            break;
-
-        case 'save':
-            // Save tiers to DB
-            coder_tiers_save_list($tiers);
-            wp_send_json(['success' => true]);
-            break;
-
-        default:
-            wp_send_json(['success' => false, 'msg' => 'Unknown task']);
-    }
-}
-
-
 
 /**
  * 
  */
 class Controller {
+    
+    const POST = INPUT_POST;
+    const GET = INPUT_GET;
+    const REQUEST = 3;
+    const SERVER = INPUT_SERVER;
+    const COOKIE = INPUT_COOKIE;
+    
     /**
      * @var array
      */
     private static $_log = array();
-    
+    /**
+     * @var array
+     */
+    private $_input = array();
+    /**
+     * @param array $input
+     */
+    protected function __construct( array $input = array() ) {
+        $this->_input = $input;
+    }
+    /**
+     * @param String $name
+     * @return String
+     */
+    public function __get($name) {
+        return $this->input()[$name] ?? '';
+    }
+    /**
+     * @return array
+     */
+    protected function input(){
+        return $this->_input;
+    }
+    /**
+     * @return String
+     */
+    protected function task(){
+        return $this->input()['action'] ?? 'default';
+    }
+
     /**
      * @return string
      */
@@ -97,23 +106,23 @@ class Controller {
         self::$_log[] = array('content' => $content , 'type' => $type );
     }
 
-
     /**
      * @return \CODERS\Tiers\CoderTiers
      */
     public static function manager(){
         return \CODERS\Tiers\CoderTiers::instance();
     }
+    
+    
     /**
      * @param string $action
      * @return bool
      */
     protected function action(){
-        $input = Input::request();
-        $action = $input->action;
-        $call = sprintf('%sAction', strlen($action) ? $action : 'default' );
+        $action = $this->task();
+        $call = sprintf('%sAction', $action );
         return method_exists($this, $call) ?
-            $this->$call( $input ) :
+            $this->$call( ) :
                 $this->error($action);
     }    
     /**
@@ -121,41 +130,30 @@ class Controller {
      * @return bool
      */
     protected function error( $action = '' ){
-        var_dump($action);
         self::notify(sprintf('Invalid action %s',$action), 'error');
         View::create('error')->view();
         return false;
     }
     /**
-     * @param array $input
      * @return bool
      */
     protected function saveAction( $input = array()) {
         var_dump($input);
-        return $this->defaultAction( array (
-            //redirected
-        ) );
-//        return true;
+        return $this->defaultAction( );
     }
     /**
-     * @param array $input
      * @return bool
      */
     protected function createAction( $input = array()){
         var_dump($input);
-        return $this->defaultAction( array (
-            //redirected
-        ) );
+        return $this->defaultAction();
     }
 
     /**
-     * @param array $input
      * @return bool
      */
-    protected function defaultAction( $input = array() ){
-
+    protected function defaultAction( ){
         View::create('main')->view('tiers');
-        
         return true;
     }
     /**
@@ -165,100 +163,16 @@ class Controller {
         if (!current_user_can('manage_options')) {
             return null;
         }
-        $controller = new Controller();
+        $controller = new Controller( self::request() );
         $controller->action( );
         return $controller;
     }
-}
-/**
- * 
- */
-class AjaxController extends Controller{
     
-    private $_response = array();
-    /**
-     * @param array $data
-     * @return \CODERS\Tiers\Admin\AjaxController
-     */
-    private function fill( array $data = array()) {
-        $this->_response = $data;
-        return $this;
-    }
-    /**
-     * @return ARray
-     */
-    public function response() {
-        return $this->_response;
-    }
-    /**
-     * 
-     * @return \CODERS\Tiers\Admin\AjaxController
-     */
-    public function send() {
-        wp_send_json($this->response());
-        return $this;
-    }
-    /**
-     * 
-     * @param Input $input
-     * @return bool
-     */
-    protected function tiersAction(Input $input = null ) {
-        $tiers = array();
-        foreach ( self::manager()->tiers(true) as $tier ){
-            $tiers = $tier->data();
-        }
-        $this->fill(array('tiers'=>$tiers));
-        return true;
-    }
-
-
-    /**
-     * @return \CODERS\Tiers\Admin\AjaxController
-     */
-    public static function run() {
-        $controller =  new AjaxController();
-        $controller->action(Input::ajax());
-        return $controller;
-    }
-}
-/**
- * 
- */
-class Input{
-    
-    const POST = INPUT_POST;
-    const GET = INPUT_GET;
-    const REQUEST = 3;
-    const SERVER = INPUT_SERVER;
-    const COOKIE = INPUT_COOKIE;
    /**
-    * @var int
-    */
-   private $_type = self::REQUEST;
-   /**
-    * @var String[]
-    */
-   private $_input = array();
-   /**
-    * @param String $type
-    */
-   private function __construct($type = self::REQUEST ) {
-       $this->_type =  $type;
-       $this->_input = $this->import($this->_type);
-   }
-   /**
-    * @param String $name
-    * @return String
-    */
-   public function __get($name = '') {
-       return $this->has($name) ? $this->input()[$name] : '';
-   }
-   /**
-    * @param String $type
+    * @param Int $type
     * @return array
     */
-   private function import($type = ''){
+   protected static function request($type = self::REQUEST ){
         switch($type){
             case self::SERVER:
                 return filter_input_array(INPUT_SERVER, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
@@ -276,79 +190,93 @@ class Input{
             default:
                 return array();
         }
-   }
-   /**
-    * @return String[]
-    */
-   public function input() {
-       return $this->_input;
-   }
-   /**
-    * @param String $name
-    * @return bool
-    */
-   public function has($name) {
-       return array_key_exists($name, $this->input());
-   }
-   /**
-    * @param String $name
-    * @return int
-    */
-   public function value($name = '' ){
-       return $this->has($name) ? intval($this->get($name)) : 0;
-   }
-   /**
-    * @param String $name
-    * @param String $separator
-    * @return String[]
-    */
-   public function list( $name , $separator = '|'){
-       return $this->has($name) ? explode($separator, $this->get($name)) : array();
-   }
-   /**
-    * @param String $name
-    * @return String
-    */
-   public static function cookie($name = ''){
-       return  !empty($name) ? filter_input(INPUT_COOKIE, $name) ?? '' : '';
-   }
-   /**
-    * @param String $name
-    * @return mixed
-    */
-   public static function server($name = '' ){
-       return !empty($name) ? filter_input(INPUT_SERVER, $name) ?? '' : '';
-   }
-   /**
-    * @return \CODERS\Tiers\Admin\Input
-    */
-   public static function get() {
-       return new Input(self::GET);
-   }
-   /**
-    * @return \CODERS\Tiers\Admin\Input
-    */
-   public static function request(){
-       return new Input(self::REQUEST);
-   }
-   /**
-    * @return \CODERS\Tiers\Admin\Input
-    */
-   public static function post(){
-       return new Input(self::POST);
-   }
-   /**
-    * @return \CODERS\Tiers\Admin\Input
-    */
-   public static function ajax() {
-       $request = self::post();
-       if( $request->has('task')){
-            $request->_input['action'] = $request->task;
-            unset($request->_input['task']);
-       }
-       return $request;
-   }
+   }    
 }
+/**
+ * 
+ */
+class AjaxController extends Controller{
+    /**
+     * @var array
+     */
+    private $_response = array();
+    /**
+     * @param array $input
+     */
+    protected function __construct(array $input = array()) {
+       $input['action'] = $input['task'] ?? 'default';
+       unset($input['task']);
+       parent::__construct($input);
+    }
+    /**
+     * @return bool
+     */
+    protected function action(): bool {
+        $result = parent::action();
+        $this->set($this->task(),$result);
+        $this->set('message',self::log());
+        return $result;
+    }
+
+    /**
+     * @return Array
+     */
+    public function response() { return $this->_response; }
+    /**
+     * @param string $att
+     * @param string $value
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    private function set($att = '' , $value = ''){
+        if(strlen($att)){
+            $this->_response[$att] = $value;
+        }
+        return $this;
+    }
+    /**
+     * @param array $data
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    private function fill( array $data = array()) {
+        $this->_response = $data;
+        return $this;
+    }
+    /**
+     * 
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    public function send() {
+        wp_send_json($this->response());
+        return $this;
+    }
+    /**
+     * 
+     */
+    protected function defaultAction() {
+        return $this->tiersAction();
+    }
+    /**
+     * @return bool
+     */
+    protected function listAction() {
+        $tiers = array();
+        foreach ( self::manager()->tiers(true) as $tier ){
+            $tiers[$tier->tier()] = $tier->roles();
+        }
+        $this->fill(array('tiers'=>$tiers));
+        return true;
+    }
+
+    /**
+     * @return \CODERS\Tiers\Admin\AjaxController
+     */
+    public static function run() {
+        $controller = new AjaxController(self::request(self::POST));
+        $controller->action();
+        return $controller;
+    }
+}
+
 /**
  * 
  */
@@ -408,50 +336,34 @@ class View{
     public function __call($name , $arguments ) {
         $args = is_array($arguments) ? $arguments : array();
         switch(true){
+            case preg_match('/^get_/', $name):
+                $get = sprintf('get%s', ucfirst(substr($name, 4)));
+                return method_exists($this, $get) ? $this->$get() : '';
             case preg_match('/^list_/', $name):
-                return $this->__list(
-                        substr($name, 5),
-                        isset($args[0]) ? $args[0]: '');
+                $list = sprintf('list%s', ucfirst(substr($name,5)));
+                return method_exists($this, $list) ? $this->$list(...$args) : array();
             case preg_match('/^is_/', $name):
-                return $this->__is(substr($name, 3));
+                $is = sprintf('is%s', ucfirst(substr($name, 3)));
+                return method_exists($this, $is) ? $this->$is(...$args) : false;
             case preg_match('/^has_/', $name):
-                return $this->__has(substr($name, 4));
-            case preg_match('/^view_/', $name):
-                return $this->__view(substr($name, 5));
+                $has = sprintf('has%s', ucfirst(substr($name, 4)));
+                return method_exists($this, $has) ? $this->$has(...$args) : false;
+            case preg_match('/^show_/', $name):
+                $show = $this->path(sprintf('templates/%s',substr($name, 5)) );
+                if(file_exists($show)) {
+                    require $show;
+                    printf('<!-- %s -->',$name);
+                    return true;
+                }
+                return false;
         }
         return array_key_exists($name,$this->_attributes) ? $this->_attributes[$name] : '';
     }
     /**
-     * @param string $action
-     * @return bool
+     * @return String
      */
-    private function __action( $action = 'default '){
-        return $action;
-    }
-    /**
-     * @param string $name
-     * @param string $arg
-     * @return array
-     */
-    private function __list($name , $arg = ''){
-        $list = sprintf('list%s', ucfirst($name));
-        return method_exists($this, $list) ? $this->$list($arg) : array();
-    }
-    /**
-     * @param string $name
-     * @return bool
-     */
-    private function __is($name){
-        $is = sprintf('is%s', ucfirst($name));
-        return method_exists($this, $is) ? $this->$is() : false;
-    }
-    /**
-     * @param string $name
-     * @return bool
-     */
-    private function __has($name){
-        $has = sprintf('has%s', ucfirst($name));
-        return method_exists($this, $has) ? $this->$has() : false;
+    protected function getFormurl(){
+        return esc_url(admin_url('admin-post.php'));
     }
     /**
      * @return bool
@@ -489,17 +401,6 @@ class View{
      */
     protected function listMessages(){
         return Controller::log();
-    }
-    /**
-     * @return \CODERS\Tiers\Admin\View
-     */
-    protected function viewMessages(){
-        foreach( $this->listMessages() as $message ){
-            printf('<div class="notice is-dismissible %s">%s</div>',
-                    $message['type'],
-                    $message['content']);
-        }
-        return $this;
     }
 
     /**
