@@ -9,9 +9,8 @@
             </ul>
             <div class="tierform">
                 <form method="post" name="newtier" action="<?php echo $this->get_formurl ?>">
-                        <?php wp_nonce_field('coder_tiers_manage'); ?>
-                        <input type="hidden" name="action" value="coder_tiers_save">
-                        <input type="hidden" name="ct_action" value="save_all">
+                        <?php wp_nonce_field('coder_nonce'); ?>
+                        <input type="hidden" name="action" value="coder_tiers">
                         <input type="text" name="tier" value="" placeholder="<?php
                             print __('Name your new tiers here!','coder_tiers');
                         ?>" class=""/>

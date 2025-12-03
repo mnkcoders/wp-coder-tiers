@@ -82,6 +82,12 @@ class CoderTiers {
     private function __construct() {
         $this->_tiers = self::load();
     }
+    /**
+     * @return \CODERS\Tiers\Data
+     */
+    public function db(){
+        return new Data();
+    }
 
     /**
      * @param bool $map
@@ -190,6 +196,21 @@ class CoderTiers {
         }
         return $tiers;
     }
+    /**
+     * @param string $tier
+     * @param string $role
+     * @return boolean
+     */
+    public function remove( $tier = '', $role = ''){
+        return $this->db()->delete( $tier );
+    }
+    /**
+     * @param string $tier
+     * @return \CODERS\Tiers\Tier
+     */
+    public function create( $tier = ''){
+        return $this->db()->create($tier) ? new Tier($tier) : null;
+    }
 }
 /**
  * 
@@ -289,6 +310,141 @@ class Tier{
      */
     public function can( $tier = ''){
         return strlen($tier) && ($tier === $this->tier() || in_array($tier, $this->roles()));
+    }
+    /**
+     * @return bool
+     */
+    public function save(){
+        return $this->manager()->db()->save($this->tier(),$this->roles());
+    }
+}
+
+
+class Data{
+    /**
+     * @var array
+     */
+    private $_log = array();
+    /**
+     * @return array
+     */
+    public function log(){
+        return $this->_log;
+    }
+    /**
+     * @param string $message
+     * @param string $type
+     * @return \CODERS\Tiers\Data
+     */
+    public function notify($message,$type='info'){
+        if( $message){
+            $this->_log[] = array(
+                'content' => $message,
+                'type' => $type,
+            );
+        }
+        return $this;
+    }
+
+    /**
+     * @global \wpdb $wpdb
+     * @return \wpdb
+     */
+    public static function db(){
+        global $wpdb;
+        return $wpdb;
+    }
+    /**
+     * @return string
+     */
+    public static function table(){
+        return self::db()->prefix . 'coder_tiers';
+    }
+    /**
+     * @return string
+     */
+    protected static function charset(){
+        return self::db()->get_charset_collate();
+    }
+    /**
+     * 
+     */
+    public function install(){
+        $table = self::table();
+        $charset_collate = self::charset();
+
+        $sql = "CREATE TABLE IF NOT EXISTS {$table} (
+            tier VARCHAR(24) NOT NULL,
+            roles VARCHAR(256) DEFAULT '',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (tier),
+            UNIQUE KEY tier (tier)
+        ) $charset_collate;";
+        require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+        $results = dbDelta($sql, true);
+        //$this->notify(print_r($results,true));
+        error_log(print_r($results, true));        
+    }
+    /**
+     * @param string $tier
+     * @return array
+     */
+    public function load($tier = ''){
+        $tiers = [];
+        $sql = array(sprintf("SELECT * FROM %s",self::table()));
+        if( $tier){
+            $sql[] = sprintf("WHERE `tier`='%s'",$tier);
+        }
+        //$select[] = "ORDER BY `tier` ASC";
+        $rows = self::db()->get_results(implode(' ', $sql), ARRAY_A);
+        if ($rows) {
+            foreach ($rows as $r) {
+                $tiers[$r['tier']] = array(
+                    'tier' => $r['tier'],
+                    //'title' => $r['title'],
+                    'roles' => array_filter(explode(':',$r['roles'])),
+                );
+            }
+        }
+        $this->notify(self::db()->error,'error');
+        return $tiers;        
+    }
+    /**
+     * @param string $tier
+     * @param array $tiers
+     * @return int
+     */
+    public function save( $tier = '', array $tiers = array()){
+        $update = 0;
+        if( $tier ){
+            $update = self::db()->update(
+                    self::table(),
+                    implode(':', $tiers),
+                    array('tier'=>$tier));
+            $this->notify(self::db()->error,'error');
+        }
+        
+        return $update ? $update > 0 : false;
+    }
+    /**
+     * @param string $tier
+     * @return bool
+     */
+    public function create( $tier = ''){
+        $output = self::db()->insert(self::table(), array('tier'=>$tier,'roles'=>array()));
+        return $output ? $output > 0 : false;
+    }
+    /**
+     * @param string $tier
+     * @return boolean
+     */
+    public function delete( $tier = ''){
+        if( $tier ){
+            $delete = self::db()->delete(self::table(), $tier);
+            $this->notify(self::db()->error,'error');
+            return $delete ? $delete > 0 : false;
+        }
+        return false;
     }
 }
 

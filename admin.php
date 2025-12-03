@@ -13,7 +13,8 @@ add_action('admin_menu', function () {
     );    
 });
 add_action('admin_post_coder_tiers', function () {
-    \CODERS\Tiers\Admin\Controller::redirect(INPUT_POST);
+    $response = \CODERS\Tiers\Admin\Controller::redirect(INPUT_POST);
+    wp_redirect(add_query_arg(array('page'=>'coder-tiers'), admin_url('admin.php')));
 });
 
 add_action('wp_ajax_coder_tiers', function(){
@@ -182,7 +183,7 @@ class Controller {
      */
     protected function error( ){
         self::notify(sprintf('Invalid action <strong>[ %s ]</strong>',$this->action()), 'error');
-        $this->layout()->view('empty');
+        //$this->layout()->view('empty');
         return $this;
     }
     /**
@@ -259,6 +260,14 @@ class Controller {
  */
 class AdminController extends Controller{
     /**
+     * @return \CODERS\Tiers\Admin\Controller
+     */
+    protected function error( ){
+        parent::error();
+        $this->layout()->view('empty');
+        return $this;
+    }
+    /**
      * @return bool
      */
     protected function saveAction( ) {
@@ -283,7 +292,25 @@ class AdminController extends Controller{
  * 
  */
 class FormController extends Controller{
-
+    /**
+     * @return boolean
+     */
+    protected function createAction(){
+        $tier = $this->tier;
+        $list = strlen($tier) ? explode(' ', $tier) : array();
+        $tiers = array();
+        foreach( $list as $t ){
+            $td = $this->manager()->create($t);
+            if( $td){
+                $tiers[] = $td->tier();
+            }
+        }
+        if(count($tiers)){
+            $this->put('tiers',$tiers);
+            return true;
+        }
+        return false;
+    }
 }
 /**
  * 
@@ -307,6 +334,20 @@ class AjaxController extends Controller{
         $this->notify(strlen($role) ?
                 sprintf('%s.%s removed',$tier,$role) :
                 sprintf('%s removed!',$tier));
+        return true;
+    }
+    /**
+     * @return boolean
+     */
+    protected function addAction(){
+        $tier = $this->tier;
+        $role = $this->role;
+        if(strlen($role) && strlen($tier)){
+            $this->put('role',$role)->put('tier',$tier);
+            //$this->data()->
+            $this->notify(sprintf('%s saved into %s',$role,$tier));
+            return true;
+        }
         return true;
     }
 

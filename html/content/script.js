@@ -248,6 +248,15 @@ class CoderClient {
     }
     /**
      * @param {String} tier 
+     * @param {String} role 
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    add( tier, role , callback = null ){
+        return this.request({'task':'add','tier':tier,'role':role},callback);
+    }
+    /**
+     * @param {String} tier 
      * @param {Function} callback 
      * @returns {CoderClient}
      */
@@ -431,9 +440,17 @@ class CoderView {
      * @returns {Element}
      */
     tierbox(tier = ''){
-        const content = this.html('span', { 'class': 'tier button-primary', 'data-tier': tier }, tier);
+        const element = this.html('span', { draggable: 'true','class': 'tier button-primary', 'data-tier': tier }, tier);
         //add drag drop events
-        return content;
+        element.addEventListener("dragstart", e => {
+            e.dataTransfer.setData("text/plain", element.dataset.tier );
+            e.dropEffect = "move";
+            element.classList.add("dragging");
+        });       
+        element.addEventListener("dragend", e => {
+            element.classList.remove("dragging");
+        });
+        return element;
     }
     /**
      * @param {String} role 
@@ -459,7 +476,31 @@ class CoderView {
      * @returns {Element}
      */
     itembox( role = ''){
-        return this.html('li', { 'class': 'item', 'data-tier': role });
+        const item = this.html('li', { 'class': 'item', 'data-tier': role });
+        item.addEventListener("dragover", e => {
+            e.preventDefault(); // REQUIRED
+            e.dataTransfer.dropEffect = "move";
+            const role = e.dataTransfer.getData("text/plain") || '';
+            const tier = item.dataset.tier || ''; // target tier
+            if( role !== tier ){
+                item.classList.add("drag-over");
+            }
+        });
+        item.addEventListener("dragleave", e => {
+            item.classList.remove("drag-over");
+        });        
+        item.addEventListener("drop", e => {
+            e.preventDefault();
+            item.classList.remove("drag-over");
+            const role = e.dataTransfer.getData("text/plain") || '';
+            const tier = item.dataset.tier || ''; // target tier
+            if( tier !== role){
+                CoderTiers.server().add(tier,role, r => {
+                    !!r._response && item.appendChild(this.rolebox(role));
+                });
+            }
+        });        
+        return item;
     }
     /**
      * @todo  implement drag-drop events on tiers and roles
