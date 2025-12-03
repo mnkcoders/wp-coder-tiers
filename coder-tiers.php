@@ -248,6 +248,22 @@ class Tier{
         return method_exists($this, $get) ? $this->$get() : '';
     }
     /**
+     * @param string $role
+     * @param boolean $save
+     * @return boolean
+     */
+    public function add($role = '' , $save = false){
+        if(strlen($role) && $role !== $this->tier() && !$this->has($role)){
+            $this->_roles[] = $role;
+            if( $save) {
+                return $this->manager()->db()->save($this->tier(), $this->roles());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * @return string
      */
     public function getName(){
@@ -305,11 +321,18 @@ class Tier{
      */
     public function roles(){ return $this->_roles; }
     /**
-     * @param String $tier
+     * @param string  $role
      * @return bool
      */
-    public function can( $tier = ''){
-        return strlen($tier) && ($tier === $this->tier() || in_array($tier, $this->roles()));
+    public function has( $role = ''){
+        return in_array($role, $this->roles());
+    }
+    /**
+     * @param String $role
+     * @return bool
+     */
+    public function can( $role = ''){
+        return strlen($role) && ($role === $this->tier() || $this->has($role));
     }
     /**
      * @return bool
@@ -411,15 +434,15 @@ class Data{
     }
     /**
      * @param string $tier
-     * @param array $tiers
+     * @param array $roles
      * @return int
      */
-    public function save( $tier = '', array $tiers = array()){
+    public function save( $tier = '', array $roles = array()){
         $update = 0;
         if( $tier ){
             $update = self::db()->update(
                     self::table(),
-                    implode(':', $tiers),
+                    implode(':', $roles),
                     array('tier'=>$tier));
             $this->notify(self::db()->error,'error');
         }

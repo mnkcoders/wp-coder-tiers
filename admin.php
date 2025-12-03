@@ -162,7 +162,7 @@ class Controller {
      * @return \CODERS\Tiers\CoderTiers
      */
     protected function data(){
-        return self::manager();
+        return self::manager()->db();
     }
 
 
@@ -344,11 +344,13 @@ class AjaxController extends Controller{
         $role = $this->role;
         if(strlen($role) && strlen($tier)){
             $this->put('role',$role)->put('tier',$tier);
-            //$this->data()->
-            $this->notify(sprintf('%s saved into %s',$role,$tier));
-            return true;
+            $td = $this->manager()->tier($tier);
+            if( $td && $td->add($role,true)) {
+                $this->notify(sprintf('%s saved into %s',$role,$tier));
+                return true;
+            }
         }
-        return true;
+        return false;
     }
 
     /**
@@ -356,9 +358,15 @@ class AjaxController extends Controller{
      */
     protected function createAction(){
         $tier = $this->tier;
-        //$this->data()->
-        $this->notify(sprintf('%s created!',$tier));
-        return true;
+        $list = explode(' ', $tier);
+        $count = 0;
+        foreach( $list as $t ){
+            if( $this->manager()->create($t)){
+                $this->notify(sprintf('%s created!',$t));
+                $count++;
+            }
+        }
+        return $count > 0;
     }
 
     /**
@@ -366,9 +374,13 @@ class AjaxController extends Controller{
      */
     protected function saveAction(){
         $tier = $this->tier;
-        $roles = $this->data()->roles($tier);
-        $this->notify(sprintf('%s saved! (%s)',$tier, implode(',', $roles)));
-        return true;
+        $roles = is_array($this->roles) ? $this->roles : array();
+        $saved = $this->data()->save($tier, $roles);
+        if( $saved ){
+            $this->notify(sprintf('%s saved! (%s)',$tier, implode(',', $roles)));
+            return true;
+        }
+        return false;
     }
     /**
      * @return bool

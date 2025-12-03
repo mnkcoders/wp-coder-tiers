@@ -496,7 +496,7 @@ class CoderView {
             const tier = item.dataset.tier || ''; // target tier
             if( tier !== role){
                 CoderTiers.server().add(tier,role, r => {
-                    !!r._response && item.appendChild(this.rolebox(role));
+                    !!r._response && item.appendChild(this.rolebox(role,tier));
                 });
             }
         });        
