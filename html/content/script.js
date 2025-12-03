@@ -27,16 +27,15 @@ class CoderTiers {
      */
     initialize(container) {
         this._tiers = [];
-        this._view = new CoderBlueprint(container);
+        this._view = new CoderView(container);
         this._client = new CoderClient(CoderTierApi || null);
         this.populate();
-        console.log(this);
     }
     /**
      * @returns {CoderTiers}
      */
     populate() {
-        this.client().request('list', response => {
+        this.client().tiers( response => {
             const data = response.tiers || {};
             this._tiers = Object.keys(data).map(tier => new CoderTier(tier, data[tier])) || [];
             this.view().refresh(this._tiers, true);
@@ -45,7 +44,7 @@ class CoderTiers {
     }
     /**
      * UL list element to hold all tiers
-     * @returns {CoderBlueprint}
+     * @returns {CoderView}
      */
     view() { return this._view; }
     /**
@@ -82,6 +81,12 @@ class CoderTiers {
     }
 
     /**
+     * @returns {CoderClient}
+     */
+    static server(){
+        return this.instance().client();
+    }
+    /**
      * @returns {CoderTiers}
      */
     static instance() {
@@ -114,7 +119,7 @@ class CoderTier {
     /**
      * @returns {String}
      */
-    tier() { return this._tier; }
+    name() { return this._tier; }
     /**
      * @returns {CoderTier[]}
      */
@@ -150,6 +155,23 @@ class CoderClient {
         this._response = {};
     }
     /**
+     * @param {Object} content 
+     * @returns {CoderClient}
+     */
+    capture( content = null ){
+        this._response = content || {};
+        console.log('RESPONSE',this._response);
+        return this;
+    }
+    /**
+     * @returns {Boolean}
+     */
+    success(){ return !!this.response()._response; }
+    /**
+     * @returns {Boolean}
+     */
+    type(){ return this.response()._type || ''; }
+    /**
      * @returns {Object[]}
      */
     log() { return Array.isArray(this.response().message) && this.response().message || []; }
@@ -173,39 +195,33 @@ class CoderClient {
         console.error("AJAX error:", error);
     }
     /**
+     * @param {String} task
      * @param {Object} data 
      * @returns {CoderClient}
      */
-    ajax(data = {}, callback = null) {
+    request(data = {}, callback = null) {
 
         data.action = 'coder_tiers';
-        data._nonce = this.nonce();
-
+        data.nonce = this.nonce();
+        if(!data.task){
+            data.task = '';
+        }
+        console.log('REQUEST',data);
         fetch(this.url(), {
             method: 'POST',
             body: new URLSearchParams(data)
         })
         .then(r => r.json())
             .then(response => {
-                if (response) {
-                    this._response = response;
-                    callback && callback(this.response());
-                }
+                this.capture(response);
+                callback && callback(this.response(),this.success());
             })
-            .catch(err => this.error(err));
+        .catch(err => this.error(err));
 
 
         //implement ajax call and callback
 
         return this;
-    }
-    /**
-     * @param {String} action 
-     * @param {Function} callback 
-     * @returns {CoderClient}
-     */
-    request(action = '', callback = null) {
-        return this.ajax({ task: action }, callback);
     }
     /**
      * @returns {Object[]}
@@ -220,23 +236,62 @@ class CoderClient {
         };
     }
 
+
     /**
      * @todo implement server call and response
      * @param {CoderTier[]} tiers 
      * @param {Function} callback 
      * @returns {CoderClient}
      */
-    send(tiers = [], callback = null) {
-
-        return this.ajax({
-            'tiers': tiers,
-        }, callback);
+    save(tiers = [], callback = null) {
+        return this.request({'task':'save','tiers': tiers}, callback);
+    }
+    /**
+     * @param {String} tier 
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    create( tier ='' , callback ){
+        return this.request({'task':'create','tier':tier},callback);
+    }
+    /**
+     * @param {String} role tier to attack to a parent
+     * @param {String} tier parent tier
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    set( role = '' , tier = '' , callback ){
+        return this.request({'task':'set','tier':tier,'role':role},callback);
+    }
+    /**
+     * @param {String} tier 
+     * @param {String} role
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    remove( tier = '' , role = '',callback = null){
+        return this.request({'task':'remove', 'tier': tier, 'role': role },callback);
+    }
+    /**
+     * @param {String} tier 
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    roles( tier = '' , callback = null ){
+        return this.request({'task':'roles','tier':tier},callback);
+    }
+    /**
+     * @param {Function} callback 
+     * @returns {CoderClient}
+     */
+    tiers( callback = null ){
+        return this.request({'task':'list'},callback);
     }
 }
 /**
  * 
  */
-class CoderBlueprint {
+class CoderView {
     /**
      * @param {String} type 
      * @param {Object} attributes 
@@ -268,6 +323,13 @@ class CoderBlueprint {
      */
     tiers() { return this.list().map(item => item.getAttribute('data-tier')); }
     /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    tier(tier = '' ){
+        return tier && this.list().find( item => item.getAttribute('data-tier') === tier) || null;
+    }
+    /**
      * List a tier's roles in the list view
      * @param {String} tier 
      * @returns {String[]}
@@ -276,6 +338,36 @@ class CoderBlueprint {
         const item = this.list().find(item => item.getAttribute('data-tier') === tier) || null;
         return item && item.children().map(t => t.getAttribute('data-role') || '').filter(t => !!t);
     }
+    /**
+     * @param {String} tier 
+     * @returns {Element[]}
+     */
+    roles( tier = ''){
+        const item = this.tier(tier);
+        return item &&
+            Array.from(item.getElementsByClassName('role'))
+            .filter( item => !!item.getAttribute('data-role')) || [];
+    }
+    /**
+     * @param {String} tier 
+     * @param {String} role 
+     * @returns {CoderClient}
+     */
+    remove( tier = ''){
+        const tierdata = tier.split('.');
+        if( tierdata.length > 1 ){
+            this.roles(tierdata[0])
+                .filter( item => item.getAttribute('data-role') === tier)
+                .forEach( item => item.remove() );
+        }
+        else{
+            const t = this.tier(tierdata[0]);
+            t && t.remove();
+        }
+        return this;
+    }
+
+
     /**
      * @param {String} type
      * @param {Object} attributes 
@@ -303,54 +395,114 @@ class CoderBlueprint {
         return `${url}&action=${action || 'default'}&target=${target}`;
     }
     /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    linkRemove( tier = ''){
+            const link = this.link('remove', tier);
+            const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
+            return this.html('a',
+                { 'class': 'remove right', 'href': link, 'target': '_self' ,'data-tier': tier },
+                icon);
+    }
+    /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    buttonRemove( tier = '' ){
+            const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
+            const button = this.html('span',
+                { 'class': 'remove right','data-tier': tier }, icon);
+            const view = this;
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const tier = (this.getAttribute('data-tier') || '').toString();
+                CoderTiers.server().remove(tier,'', r => {
+                    console.log(r);
+                    view.remove(r.tier || '');
+                });
+                return true;
+            });
+
+            return button;
+    }
+    /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    tierbox(tier = ''){
+        const content = this.html('span', { 'class': 'tier button-primary', 'data-tier': tier }, tier);
+        //add drag drop events
+        return content;
+    }
+    /**
+     * @param {String} role 
+     * @returns {Element}
+     */
+    rolebox(role = '',tier = ''){
+        const roledata = tier && `${tier}.${role}` || role;
+        const content = this.html('span', { 'class': 'role button', 'data-role': roledata }, role);
+        const view = this;
+        content.addEventListener('click', function(e) {
+            e.preventDefault();
+            const content = (this.getAttribute('data-role') || '').toString();
+            const td = content.split('.');
+            CoderTiers.server().remove(td[0],td[1] || '', r =>{
+                r.tier && r.role && view.remove( tier + '.' + role );
+            });
+            return true;
+        });
+        return content
+    }
+    /**
+     * @param {String} role 
+     * @returns {Element}
+     */
+    itembox( role = ''){
+        return this.html('li', { 'class': 'item', 'data-tier': role });
+    }
+    /**
      * @todo  implement drag-drop events on tiers and roles
      * @param {CoderTier} content
      * @returns {Boolean} 
      */
     add(content = null) {
         if (content instanceof CoderTier) {
-            const name = content.tier();
-            const item = this.html('li', { 'class': 'item', 'data-owner': name });
-            const tier = this.html('span', { 'class': 'tier button-primary', 'data-tier': content.tier() }, content.tier());
-            const roles = content.roles().map(role => this.html('span', { 'class': 'role button', 'data-role': role }, role));
-            const removeLink = this.link('remove', content.tier());
-            const remove = this.html('a', { 'class': 'remove right', 'href': removeLink, 'target': '_self' },
-                this.html('span', { 'class': 'dashicons dashicons-remove' }));
-            //add drag-drop events here
+            const name = content.name();
+            const item = this.itembox(name);
+            const roles = content.roles().map(role => this.rolebox(role,name));
 
-            item.appendChild(tier);
+            item.appendChild(this.tierbox(name));
             roles.forEach(role => item.append(role));
             this.content().appendChild(item);
-            item.appendChild(remove);
+            item.appendChild(this.buttonRemove(name));
             return true;
         }
         return false;
     }
     /**
      * @param {String} tier 
-     * @returns {Element}
-     */
-    get(tier = '') { return this.list().find(item => item.id === tier) || null; }
-    /**
-     * @param {String} tier 
      * @returns {Boolean}
      */
-    has(tier = '') { return !!this.get(tier); }
+    has(tier = '') { return !!this.tier(tier); }
     /**
      * Main event to handle the tier list from server's response
      * @todo implement update (refresh) or add new to the list
      * @param {CoderTier[]} content 
-     * @returns {CoderBlueprint}
+     * @returns {CoderView}
      */
     refresh(content = [], clear = false) {
-        //fetch a tier name list
-        const list = content.map(t => t.tier());
         //remove non existing tiers
         clear && this.clear();
         content.forEach(tier => {
             //get the tier's  content and rewrite it all
-            if (this.has(tier.tier())) {
+            if (this.has(tier.name())) {
                 //update
+                this.roles(tier.name()).forEach( e => e.remove() );
+                tier.roles()
+                    .map(role => role.name())
+                    .map( role => this.rolebox(role,tier.name()))
+                    .forEach( item => container.appendChild(item));
             }
             else {
                 //add
@@ -363,18 +515,16 @@ class CoderBlueprint {
      * @todo Implement remove
      * Remove all or selected items in the list
      * @param {String[]} tiers 
-     * @returns {CoderBlueprint}
+     * @returns {CoderView}
      */
     clear(tiers = []) {
         if (tiers.length) {
             //remove all children in tiers list
-            tiers.forEach(t => {
-                //remove from UL content
-            });
+            tiers.map( tier => this.tier(tier)).forEach( t => t && t.remove());
         }
         else if (this.content()) {
             //reset
-            this.content().innerHTML = '';
+            this.tiers().forEach( t => t.remove());
         }
         return this;
     }

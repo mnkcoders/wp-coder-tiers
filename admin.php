@@ -8,16 +8,22 @@ add_action('admin_menu', function () {
             __('Coder Tiers','coder_tiers'),
             'manage_options',
             'coder-tiers',
-            function () { \CODERS\Tiers\Admin\Controller::run(); },
-            //function () { \CODERS\Tiers\Admin\Controller::run(); },
+            function () { \CODERS\Tiers\Admin\Controller::redirect(); },
             'dashicons-admin-network', 40
     );    
 });
-add_action('admin_post_coder_tiers_save', function () {
-    \CODERS\Tiers\Admin\Controller::run('save');
+add_action('admin_post_coder_tiers', function () {
+    \CODERS\Tiers\Admin\Controller::redirect(INPUT_POST);
 });
-add_action('admin_post_coder_tiers_create', function () {
-    \CODERS\Tiers\Admin\Controller::run('create');
+
+add_action('wp_ajax_coder_tiers', function(){
+    $request = \CODERS\Tiers\Admin\AjaxController::redirect(4);
+    wp_send_json($request->response());
+});
+// if non-logged-in allowed:
+add_action('wp_ajax_nopriv_coder_tiers', function(){
+    $request = \CODERS\Tiers\Admin\Controller::redirect(4);
+    wp_send_json($request->response());
 });
 add_action('admin_enqueue_scripts',function(){
     $style = sprintf('%shtml/content/style.css', CODER_TIERS_URL);
@@ -37,15 +43,6 @@ add_action('admin_enqueue_scripts',function(){
     ]);
 });
 
-add_action('wp_ajax_coder_tiers', function(){
-    $controller = \CODERS\Tiers\Admin\AjaxController::run();
-    wp_send_json($controller->response());
-});
-// if non-logged-in allowed:
-add_action('wp_ajax_nopriv_coder_tiers', function(){
-    $controller = \CODERS\Tiers\Admin\AjaxController::run();
-    wp_send_json($controller->response());
-});
 
 /**
  * 
@@ -54,9 +51,10 @@ class Controller {
     
     const POST = INPUT_POST;
     const GET = INPUT_GET;
-    const REQUEST = 3;
-    const SERVER = INPUT_SERVER;
     const COOKIE = INPUT_COOKIE;
+    const REQUEST = 3;
+    const AJAX = 4;
+    const SERVER = INPUT_SERVER;
     
     /**
      * @var array
@@ -65,31 +63,78 @@ class Controller {
     /**
      * @var array
      */
-    private $_input = array();
+    private $_content = array();
+    /**
+     * @var array
+     */
+    private $_response = array();
+    
     /**
      * @param array $input
      */
     protected function __construct( array $input = array() ) {
-        $this->_input = $input;
+        $this->_content = $input;
     }
     /**
      * @param String $name
      * @return String
      */
     public function __get($name) {
-        return $this->input()[$name] ?? '';
-    }
-    /**
-     * @return array
-     */
-    protected function input(){
-        return $this->_input;
+        return $this->content()[$name] ?? '';
     }
     /**
      * @return String
      */
-    protected function task(){
-        return $this->input()['action'] ?? 'default';
+    public function type(){
+        $type = explode('\\',get_called_class());
+        return $type[count($type)-1];
+    }
+
+    /**
+     * @return array
+     */
+    private function content(){
+        return $this->_content;
+    }
+    /**
+     * @return String
+     */
+    protected function action(){
+        return $this->content()['action'] ?? 'main';
+    }
+
+    /**
+     * @return Array
+     */
+    public function response() { return $this->_response; }
+    
+    /**
+     * @param string $att
+     * @param string $value
+     * @return \CODERS\Tiers\Admin\Controller
+     */
+    protected function put($att = '' , $value = ''){
+        if(strlen($att)){
+            $this->_response[$att] = $value;
+        }
+        return $this;
+    }
+    /**
+     * @param array $data
+     * @return \CODERS\Tiers\Admin\Controller
+     */
+    protected function fill( array $data = array()) {
+        foreach($data as $var => $val ){
+            $this->_response[$var] = $val;
+        }
+        return $this;
+    }
+    /**
+     * @param string $context main as default
+     * @return \CODERS\Tiers\Admin\View
+     */
+    protected function layout( $context = 'main' ){
+        return View::create( strlen($context) ? $context : $this->action());
     }
 
     /**
@@ -112,72 +157,89 @@ class Controller {
     public static function manager(){
         return \CODERS\Tiers\CoderTiers::instance();
     }
-    
-    
+    /**
+     * @return \CODERS\Tiers\CoderTiers
+     */
+    protected function data(){
+        return self::manager();
+    }
+
+
     /**
      * @param string $action
-     * @return bool
+     * @return \CODERS\Tiers\Admin\Controller
      */
-    protected function action(){
-        $action = $this->task();
+    protected function run(){
+        $action = $this->action();
         $call = sprintf('%sAction', $action );
-        return method_exists($this, $call) ?
+        $this->put('_type',$this->type())->put('_action',$action);
+        return $this->put('_response',method_exists($this, $call) ?
             $this->$call( ) :
-                $this->error($action);
+                $this->error($action));
     }    
     /**
-     * @param string $action
-     * @return bool
+     * @return \CODERS\Tiers\Admin\Controller
      */
-    protected function error( $action = '' ){
-        self::notify(sprintf('Invalid action %s',$action), 'error');
-        View::create('error')->view();
-        return false;
+    protected function error( ){
+        self::notify(sprintf('Invalid action <strong>[ %s ]</strong>',$this->action()), 'error');
+        $this->layout()->view('empty');
+        return $this;
     }
     /**
-     * @return bool
+     * @return boolean
      */
-    protected function saveAction( $input = array()) {
-        var_dump($input);
-        return $this->defaultAction( );
-    }
-    /**
-     * @return bool
-     */
-    protected function createAction( $input = array()){
-        var_dump($input);
-        return $this->defaultAction();
+    protected function mainAction(){
+        //implement in subclasses ;)
+        self::notify('Implement Controller subclass ;)');
+        return true;
     }
 
     /**
-     * @return bool
+     * @param String $context
+     * @param array $input
+     * @return \CODERS\Tiers\Admin\Controller
      */
-    protected function defaultAction( ){
-        View::create('main')->view('tiers');
-        return true;
+    private static final function create( $context = '' ,array $input = array()){
+        $class = sprintf('\CODERS\Tiers\Admin\%sController', ucfirst($context));
+        return class_exists($class) && is_subclass_of($class, self::class,true) ?
+                new $class( $input ) :
+                    new Controller($input);
     }
+
     /**
-     * @return null|\CODERS\Tiers\Admin\Controller
+     * @param int $type
+     * @return \CODERS\Tiers\Admin\Controller
      */
-    public static function run(  ) {
+    public static final function redirect( $type = self::REQUEST ) {
         if (!current_user_can('manage_options')) {
             return null;
         }
-        $controller = new Controller( self::request() );
-        $controller->action( );
-        return $controller;
+        switch($type){
+            case self::AJAX:
+                return self::create('ajax',self::input(self::POST,true))->run();
+            case self::POST:
+                return self::create('form',self::input($type,true))->run();
+            default:
+                return self::create('admin',self::input($type))->run( );
+        }
     }
     
    /**
-    * @param Int $type
+    * @param Int $type POST,GET,REQUEST,SERVER,COOKIE
+    * @param bool $maskaction parse task to action
     * @return array
     */
-   protected static function request($type = self::REQUEST ){
+   protected static function input($type = self::REQUEST , $maskaction = false ){
         switch($type){
             case self::SERVER:
                 return filter_input_array(INPUT_SERVER, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
             case self::POST:
-                return filter_input_array(INPUT_POST, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
+                $input = filter_input_array(INPUT_POST, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
+                if( $maskaction ){
+                    $input['action'] = $input['task'] ?? 'main';
+                    unset($input['task']);
+                }
+                return $input;
             case self::GET:
                 return filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
             case self::COOKIE:
@@ -193,87 +255,102 @@ class Controller {
    }    
 }
 /**
- * 
+ * Default view controller
  */
-class AjaxController extends Controller{
+class AdminController extends Controller{
     /**
-     * @var array
+     * @return bool
      */
-    private $_response = array();
-    /**
-     * @param array $input
-     */
-    protected function __construct(array $input = array()) {
-       $input['action'] = $input['task'] ?? 'default';
-       unset($input['task']);
-       parent::__construct($input);
+    protected function saveAction( ) {
+        return $this->mainAction( );
     }
     /**
      * @return bool
      */
-    protected function action(): bool {
-        $result = parent::action();
-        $this->set($this->task(),$result);
-        $this->set('message',self::log());
-        return $result;
+    protected function createAction(){
+        return $this->mainAction();
     }
 
     /**
-     * @return Array
+     * @return bool
      */
-    public function response() { return $this->_response; }
+    protected function mainAction( ){
+        $this->layout('main')->view('tiers');
+        return true;
+    }    
+}
+/**
+ * 
+ */
+class FormController extends Controller{
+
+}
+/**
+ * 
+ */
+class AjaxController extends Controller{
+
     /**
-     * @param string $att
-     * @param string $value
      * @return \CODERS\Tiers\Admin\AjaxController
      */
-    private function set($att = '' , $value = ''){
-        if(strlen($att)){
-            $this->_response[$att] = $value;
-        }
-        return $this;
+    protected function run() {
+        return parent::run()->put('message',self::log());
     }
     /**
-     * @param array $data
-     * @return \CODERS\Tiers\Admin\AjaxController
+     * @return boolean
      */
-    private function fill( array $data = array()) {
-        $this->_response = $data;
-        return $this;
+    protected function removeAction(){
+        $tier = $this->tier;
+        $role = $this->role;
+        //$this->data()->
+        $this->put('role',$role)->put('tier',$tier);
+        $this->notify(strlen($role) ?
+                sprintf('%s.%s removed',$tier,$role) :
+                sprintf('%s removed!',$tier));
+        return true;
     }
+
     /**
-     * 
-     * @return \CODERS\Tiers\Admin\AjaxController
+     * @return boolean
      */
-    public function send() {
-        wp_send_json($this->response());
-        return $this;
+    protected function createAction(){
+        $tier = $this->tier;
+        //$this->data()->
+        $this->notify(sprintf('%s created!',$tier));
+        return true;
+    }
+
+    /**
+     * @return boolean
+     */
+    protected function saveAction(){
+        $tier = $this->tier;
+        $roles = $this->data()->roles($tier);
+        $this->notify(sprintf('%s saved! (%s)',$tier, implode(',', $roles)));
+        return true;
     }
     /**
-     * 
+     * @return bool
+     */
+    protected function mainAction() {
+        return $this->listAction();
+    }
+    /**
+     * @return bool
      */
     protected function defaultAction() {
-        return $this->tiersAction();
+        return $this->listAction();
     }
     /**
      * @return bool
      */
     protected function listAction() {
         $tiers = array();
-        foreach ( self::manager()->tiers(true) as $tier ){
+        foreach ( $this->data()->tiers(true) as $tier ){
             $tiers[$tier->tier()] = $tier->roles();
         }
         $this->fill(array('tiers'=>$tiers));
         return true;
-    }
-
-    /**
-     * @return \CODERS\Tiers\Admin\AjaxController
-     */
-    public static function run() {
-        $controller = new AjaxController(self::request(self::POST));
-        $controller->action();
-        return $controller;
     }
 }
 
