@@ -3,7 +3,7 @@ defined('ABSPATH') || exit;
 /**
  * Plugin Name: Coder Tiers
  * Description: Lightweight ACL tiers service. use coder_tiers, coder_role and coder_acl filters to map tiers to other plugins.
- * Version:     0.1.0
+ * Version:     1.0.0
  * Author:      Coder#1
  * Text Domain: coder_tiers
  */
@@ -12,10 +12,10 @@ define('CODER_TIERS_URL', plugin_dir_url(__FILE__));
 
 // Activation hook
 register_activation_hook(__FILE__, function(){
-    \CODERS\Tiers\CoderTiers::install();
+    \CODERS\Tiers\Data::install();
 });
 register_deactivation_hook(__FILE__, function(){
-    \CODERS\Tiers\CoderTiers::uninstall();
+    //\CODERS\Tiers\Data::uninstall();
 });
 
 add_action('init', function () {
@@ -73,15 +73,39 @@ function coder_tiers_test(){
 class CoderTiers {
 
     /** Singleton instance */
-    private static $instance = null;
+    private static $_instance = null;
 
     /** Cached tiers array (id => row) */
     private $_tiers = array();
-
-    /** Prevent direct construction. */
-    private function __construct() {
-        $this->_tiers = self::load();
+    /**
+     * @var array
+     */
+    private $_log = array();
+    /**
+     * 
+     */
+    private function __construct() {}
+    /**
+     * @return array
+     */
+    public function log(){
+        return $this->_log;
     }
+    /**
+     * @param string $message
+     * @param string $type
+     * @return \CODERS\Tiers\CoderTiers
+     */
+    public function notify($message,$type = 'info'){
+        if( $message ){
+            $this->_log[] = array(
+                'content' => $message,
+                'type' => $type,
+            );
+        }
+        return $this;
+    }
+
     /**
      * @return \CODERS\Tiers\Data
      */
@@ -138,63 +162,19 @@ class CoderTiers {
      * @return \CODERS\Tiers\CoderTiers
      */
     public static function instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
+        if (null === self::$_instance) {
+            self::$_instance = new self();
+            self::$_instance->load();
         }
-        return self::$instance;
+        return self::$_instance;
     }
 
     /**
-     * @global wpdb $wpdb
-     * @return String
+     * @return \CODERS\Tiers\CoderTiers
      */
-    public static function table() {
-        global $wpdb;
-        return $wpdb->prefix . 'coder_tiers';
-    }
-    /**
-     * @param bool $remove
-     */
-    public  static function uninstall($remove = false ) {
-        //add deactivation methods here, remove table data, resources etc.
-    }
-    /** Activation: create DB table */
-    public static function install() {
-        global $wpdb;
-        $table = self::table();
-        $charset_collate = $wpdb->get_charset_collate();
-
-        $sql = "CREATE TABLE IF NOT EXISTS {$table} (
-            tier VARCHAR(24) NOT NULL,
-            roles VARCHAR(256) DEFAULT '',
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (tier),
-            UNIQUE KEY tier (tier)
-        ) $charset_collate;";
-        require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
-        $results = dbDelta($sql, true);
-        error_log(print_r($results, true));
-    }
-
-    /**
-     * @global wpdb $wpdb
-     * @return Array
-     */
-    private static function load() {
-        $tiers = [];
-        global $wpdb;
-        $table = self::table();
-        $rows = $wpdb->get_results("SELECT * FROM {$table} ORDER BY `tier` ASC", ARRAY_A);
-        if ($rows) {
-            foreach ($rows as $r) {
-                $tiers[$r['tier']] = array(
-                    'tier' => $r['tier'],
-                    //'title' => $r['title'],
-                    'roles' => array_filter(explode(':',$r['roles'])),
-                );
-            }
-        }
-        return $tiers;
+    private function load() {
+        $this->_tiers = $this->db()->load();
+        return $this;
     }
     /**
      * @param string $tier
@@ -256,9 +236,28 @@ class Tier{
         if(strlen($role) && $role !== $this->tier() && !$this->has($role)){
             $this->_roles[] = $role;
             if( $save) {
-                return $this->manager()->db()->save($this->tier(), $this->roles());
+                return $this->manager()->db()->save(
+                        $this->tier(),
+                        $this->roles()
+                );
             }
             return true;
+        }
+        return false;
+    }
+    /**
+     * @param string $role
+     * @param boolean $save
+     * @return boolean
+     */
+    public function drop( $role = '' , $save = false ){
+        if(strlen($role) && $this->has($role)){
+            $roles = array();
+            foreach($this->_roles as $r ){
+                if( $role !== $r){ $roles[] = $r; }
+            }
+            $this->_roles = $roles;
+            return $save ? $this->save() : true;
         }
         return false;
     }
@@ -345,27 +344,12 @@ class Tier{
 
 class Data{
     /**
-     * @var array
-     */
-    private $_log = array();
-    /**
-     * @return array
-     */
-    public function log(){
-        return $this->_log;
-    }
-    /**
      * @param string $message
      * @param string $type
      * @return \CODERS\Tiers\Data
      */
     public function notify($message,$type='info'){
-        if( $message){
-            $this->_log[] = array(
-                'content' => $message,
-                'type' => $type,
-            );
-        }
+        CoderTiers::instance()->notify($message, $type);
         return $this;
     }
 
@@ -392,7 +376,7 @@ class Data{
     /**
      * 
      */
-    public function install(){
+    public static function install(){
         $table = self::table();
         $charset_collate = self::charset();
 
@@ -406,7 +390,10 @@ class Data{
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         $results = dbDelta($sql, true);
         //$this->notify(print_r($results,true));
-        error_log(print_r($results, true));        
+        foreach($results as $r ){
+            CoderTiers::instance()->notify($r);
+        }
+        //error_log(print_r($results, true));        
     }
     /**
      * @param string $tier
@@ -438,16 +425,16 @@ class Data{
      * @return int
      */
     public function save( $tier = '', array $roles = array()){
-        $update = 0;
         if( $tier ){
             $update = self::db()->update(
                     self::table(),
-                    implode(':', $roles),
+                    array('roles'=>implode(':', $roles)),
                     array('tier'=>$tier));
             $this->notify(self::db()->error,'error');
+            return $update !== false && $update > 0;
         }
         
-        return $update ? $update > 0 : false;
+        return false;
     }
     /**
      * @param string $tier
@@ -463,7 +450,7 @@ class Data{
      */
     public function delete( $tier = ''){
         if( $tier ){
-            $delete = self::db()->delete(self::table(), $tier);
+            $delete = self::db()->delete(self::table(), array('tier'=>$tier));
             $this->notify(self::db()->error,'error');
             return $delete ? $delete > 0 : false;
         }

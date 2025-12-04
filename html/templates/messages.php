@@ -1,6 +1,8 @@
 <?php defined('ABSPATH') || die; ?>
-<?php foreach( $this->list_messages()  as $message ) :  ?>
-<div class="notice is-dismissible <?php print $message['type'] ?? 'info' ?>">
-    <?php print $message['content'] ?? '' ?>
+<div class="coder-tiers-log">
+    <?php foreach ($this->list_messages() as $message) : ?>
+        <div class="notice is-dismissible <?php print $message['type'] ?? 'info'  ?>">
+            <?php print $message['content'] ?? ''  ?>
+        </div>
+    <?php endforeach; ?>
 </div>
-<?php endforeach; ?>

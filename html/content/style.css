@@ -4,6 +4,32 @@
     
 }
 
+.coder-tiers .tierform {
+    padding: 16px;
+    margin: 40px 0;
+    border-bottom: 1px solid #dadada;
+}
+.coder-tiers .tierform input[type="text"] {
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    min-width: 300px;
+    transition: ease-in 200ms;
+    
+    background-color: rgba(255,255,255,0);
+}
+.coder-tiers .tierform input[type="text"]:hover,
+.coder-tiers .tierform input[type="text"]:active,
+.coder-tiers .tierform input[type="text"]:focus{
+    border-color: #ccd0d4;
+    background-color: rgba(255,255,255,0.8);
+}
+
+.coder-tiers .tierform button {
+    min-width: 200px;
+}
+
+
 
 ul.tier-list {
     list-style: none;
@@ -16,15 +42,22 @@ ul.tier-list li.item {
     background: #fff;
     border: 1px solid #ccd0d4;
     border-radius: 6px;
-    padding: 12px 16px;
+    padding: 20px 16px;
     margin-bottom: 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     transition: ease-in 100ms;
+    position: relative;
 }
 ul.tier-list li.item.drag-over{
     box-shadow: 0 0 8px rgba(0,0,0,0.25);
+    background-color: rgba(255,255,240,255);
 }
 
+ul.tier-list li.item .tier,
+ul.tier-list li.item .role {
+    margin: 0 20px 20px 0;
+    font-weight: 500;
+}
 ul.tier-list li.item .tier {
     min-width: 200px;
     text-align: center;
@@ -36,51 +69,52 @@ ul.tier-list li.item .tier {
     -ms-user-select: none;    
 }    
 
-ul.tier-list li.item .tierbak {
-    font-size: 15px;
-    font-weight: 600;
-    padding: 6px 10px;
-    background: #f6f7f7;
-    border: 1px solid #dcdcde;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-block;
-    margin-bottom: 10px;
-    transition: background 0.2s;
-    
-}
-
 ul.tier-list li.item .tier:hover {
     background: #e9ecef;
 }
 
+ul.tier-list li.item > .remove {
+    transition: ease-in all 0.2s;
+    padding: 10px;
+    margin: 0;
+    position: absolute;
+    top: 0; right: 0;
+}
+ul.tier-list li.item > .remove > .dashicons{ opacity: 0.2; transition: ease-in all 0.2s; }
+ul.tier-list li.item > .remove:hover > .dashicons{
+    opacity: 1;
+}
 ul.tier-list li.item .role {
     display: inline-block;
     min-width: 120px;
     text-align: center;
-    margin: 0 0 0 20px;
-    transition: background 0.2s;
+    transition: ease-in 0.2s;
+    position: relative;
 
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;    
 }
-ul.tier-list li.item .rolebak {
-    background: #e6f2ff;
-    color: #1d4e89;
-    border: 1px solid #bcd6f5;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.2s;
-  
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;    
+ul.tier-list li.item .role:after{
+    content: '\f14f';
+    font-family: dashicons;
+    display: inline-block;
+    position: absolute;
+    right: 10px;
+    top: 0;
+    opacity: 0;
+    transition: ease-in all 0.2s;
 }
+
+ul.tier-list li.item .role:hover{
+    padding-left: 5px;
+    padding-right: 15px;   
+}
+ul.tier-list li.item .role:hover:after{
+    opacity: 1;
+}
+
 
 ul.tier-list li.item .role:hover {
     background: #dbe9ff;
@@ -98,46 +132,10 @@ ul.tier-list li.item .right{
     float:right;
 }
 
-ul.tier-list li.tierform {
-    padding: 16px;
-    border: 1px dashed #ccd0d4;
-    border-radius: 6px;
-    background: #f9f9f9;
-    margin: 40px 0;
-}
 
-/*ul.tier-list li.tierform form {
+/*.coder-tiers .tierform form {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
 }*/
 
-ul.tier-list li.tierform input[type="text"] {
-    padding: 6px 8px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    min-width: 300px;
-    transition: ease-in 200ms;
-    
-    background-color: rgba(255,255,255,0);
-}
-ul.tier-list li.tierform input[type="text"]:hover,
-ul.tier-list li.tierform input[type="text"]:active,
-ul.tier-list li.tierform input[type="text"]:focus{
-    border-color: #ccd0d4;
-    background-color: rgba(255,255,255,0.8);
-}
-
-ul.tier-list li.item .tierform button {
-    padding: 6px 14px;
-    border: none;
-    background: #0073aa;
-    color: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: ease-in 200ms;
-}
-
-ul.tier-list li.item .tierform button:hover {
-    background: #006799;
-}

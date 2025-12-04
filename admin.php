@@ -8,24 +8,28 @@ add_action('admin_menu', function () {
             __('Coder Tiers','coder_tiers'),
             'manage_options',
             'coder-tiers',
-            function () { \CODERS\Tiers\Admin\Controller::redirect(); },
+            function () {
+                $controller = filter_input(INPUT_GET, '_testcontroller') ?? 'admin';
+                \CODERS\Tiers\Admin\Controller::redirect( $controller );
+            },
             'dashicons-admin-network', 40
     );    
 });
 add_action('admin_post_coder_tiers', function () {
-    $response = \CODERS\Tiers\Admin\Controller::redirect(INPUT_POST);
+    \CODERS\Tiers\Admin\Controller::redirect('form',INPUT_POST);
     wp_redirect(add_query_arg(array('page'=>'coder-tiers'), admin_url('admin.php')));
 });
 
 add_action('wp_ajax_coder_tiers', function(){
-    $request = \CODERS\Tiers\Admin\AjaxController::redirect(4);
+    $request = \CODERS\Tiers\Admin\Controller::redirect('ajax',INPUT_POST);
     wp_send_json($request->response());
 });
 // if non-logged-in allowed:
 add_action('wp_ajax_nopriv_coder_tiers', function(){
-    $request = \CODERS\Tiers\Admin\Controller::redirect(4);
+    $request = \CODERS\Tiers\Admin\Controller::redirect('ajax',INPUT_POST);
     wp_send_json($request->response());
 });
+
 add_action('admin_enqueue_scripts',function(){
     $style = sprintf('%shtml/content/style.css', CODER_TIERS_URL);
     $style_path = sprintf('%shtml/content/style.css', CODER_TIERS_DIR);
@@ -54,7 +58,7 @@ class Controller {
     const GET = INPUT_GET;
     const COOKIE = INPUT_COOKIE;
     const REQUEST = 3;
-    const AJAX = 4;
+    //const AJAX = 4;
     const SERVER = INPUT_SERVER;
     
     /**
@@ -142,14 +146,16 @@ class Controller {
      * @return string
      */
     public static function log(){
-        return self::$_log; 
+        return array_merge(self::$_log,self::manager()->log()); 
     }
     /**
      * @param string $content
      * @param string $type
+     * @return \CODERS\Tiers\Admin\Controller
      */
-    public static function notify($content = '' , $type = 'info'){
+    public function notify($content = '' , $type = 'info'){
         self::$_log[] = array('content' => $content , 'type' => $type );
+        return $this;
     }
 
     /**
@@ -159,7 +165,7 @@ class Controller {
         return \CODERS\Tiers\CoderTiers::instance();
     }
     /**
-     * @return \CODERS\Tiers\CoderTiers
+     * @return \CODERS\Tiers\Data
      */
     protected function data(){
         return self::manager()->db();
@@ -171,29 +177,45 @@ class Controller {
      * @return \CODERS\Tiers\Admin\Controller
      */
     protected function run(){
-        $action = $this->action();
-        $call = sprintf('%sAction', $action );
-        $this->put('_type',$this->type())->put('_action',$action);
-        return $this->put('_response',method_exists($this, $call) ?
-            $this->$call( ) :
-                $this->error($action));
+        try{
+            $action = $this->action();
+            $call = sprintf('%sAction', $action );
+            $this->put('_type',$this->type())->put('_action',$action);
+            $response = method_exists($this, $call) ?
+                $this->$call( ) :
+                    $this->error($action);
+            return $this->put('_response',$response);
+        }
+        catch (\Exception $ex) {
+            $this->notify($ex->getMessage(),'error');
+        }
+        return $this->put('_response',false);
     }    
     /**
-     * @return \CODERS\Tiers\Admin\Controller
+     * @return bool
      */
     protected function error( ){
-        self::notify(sprintf('Invalid action <strong>[ %s ]</strong>',$this->action()), 'error');
-        //$this->layout()->view('empty');
-        return $this;
+        $this->notify(sprintf('Invalid action <strong>[ %s ]</strong>',$this->action()), 'error');
+        return false;
     }
     /**
      * @return boolean
      */
     protected function mainAction(){
         //implement in subclasses ;)
-        self::notify('Implement Controller subclass ;)');
+        $this->notify('Implement Controller subclass ;)');
         return true;
     }
+    /**
+     * Redirect to a new controller with custom inputs
+     * @param string $context
+     * @param array $input
+     * @return \CODERS\Tiers\Admin\Controller
+     */
+    public function forward( $context = '' , array $input = array()){
+        return self::create($context, $input);
+    }
+
 
     /**
      * @param String $context
@@ -208,21 +230,12 @@ class Controller {
     }
 
     /**
+     * @param String $context
      * @param int $type
      * @return \CODERS\Tiers\Admin\Controller
      */
-    public static final function redirect( $type = self::REQUEST ) {
-        if (!current_user_can('manage_options')) {
-            return null;
-        }
-        switch($type){
-            case self::AJAX:
-                return self::create('ajax',self::input(self::POST,true))->run();
-            case self::POST:
-                return self::create('form',self::input($type,true))->run();
-            default:
-                return self::create('admin',self::input($type))->run( );
-        }
+    public static final function redirect( $context = 'admin' ,$type = self::REQUEST ) {
+        return self::create($context, self::input($type, $type === self::POST))->run();
     }
     
    /**
@@ -230,10 +243,10 @@ class Controller {
     * @param bool $maskaction parse task to action
     * @return array
     */
-   protected static function input($type = self::REQUEST , $maskaction = false ){
+   public static function input($type = self::REQUEST , $maskaction = false ){
         switch($type){
-            case self::SERVER:
-                return filter_input_array(INPUT_SERVER, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+            case self::COOKIE:
+                return filter_input_array(INPUT_COOKIE,FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
             case self::POST:
                 $input = filter_input_array(INPUT_POST, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
                 if( $maskaction ){
@@ -243,8 +256,6 @@ class Controller {
                 return $input;
             case self::GET:
                 return filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
-            case self::COOKIE:
-                return filter_input_array(INPUT_COOKIE,FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
             case self::REQUEST:
                 return array_merge(
                     filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [],
@@ -260,12 +271,22 @@ class Controller {
  */
 class AdminController extends Controller{
     /**
-     * @return \CODERS\Tiers\Admin\Controller
+     * @return \CODERS\Tiers\Admin\AdminController
+     */
+    protected function run() {
+        if( current_user_can('manage_options')){
+            return parent::run();
+        }
+        return $this->notify('Invalid access','error')->put('_response',false);
+    }
+
+    /**
+     * @return bool
      */
     protected function error( ){
         parent::error();
         $this->layout()->view('empty');
-        return $this;
+        return false;
     }
     /**
      * @return bool
@@ -286,7 +307,16 @@ class AdminController extends Controller{
     protected function mainAction( ){
         $this->layout('main')->view('tiers');
         return true;
-    }    
+    }
+    /**
+     * @return boolean
+     */
+    protected function messageAction(){
+        $this->notify('Test Message','info');
+        $this->notify('Test Update','update');
+        $this->notify('Test Error','error');
+        return $this->mainAction();
+    }
 }
 /**
  * 
@@ -296,17 +326,21 @@ class FormController extends Controller{
      * @return boolean
      */
     protected function createAction(){
-        $tier = $this->tier;
-        $list = strlen($tier) ? explode(' ', $tier) : array();
+        $list = $this->tier ? explode(' ', $this->tier) : array();
         $tiers = array();
+        $manager = $this->manager();
         foreach( $list as $t ){
-            $td = $this->manager()->create($t);
-            if( $td){
-                $tiers[] = $td->tier();
+            $t = strtolower($t);
+            if(!$manager->has($t)){
+                $td = $manager->create($t);
+                if( $td){
+                    $tiers[] = $td->tier();
+                }
             }
         }
         if(count($tiers)){
             $this->put('tiers',$tiers);
+            $this->notify(sprintf('<b>%s</b> new tiers created',count($tiers)), 'update');
             return true;
         }
         return false;
@@ -329,11 +363,28 @@ class AjaxController extends Controller{
     protected function removeAction(){
         $tier = $this->tier;
         $role = $this->role;
-        //$this->data()->
+        if( empty($tier) ){
+            $this->notify(sprintf('Empty tier <b>%s</b>',$tier),'warning');
+            return false;
+        }
+        if( !empty($role)){
+            $td = $this->manager()->tier($tier);
+            if( $td && $td->drop($role, true)){
+                $this->notify(sprintf('Role <strong>%s</strong> removed',$role),'update');
+            }
+            else{
+                $this->notify(sprintf('Unable to remove <b>%s</b>',$role),'warning');
+            }
+        }
+        else{
+            if( $this->data()->delete($tier) ){
+                $this->notify(sprintf('<strong>%s</strong> removed',$tier),'update');
+            }
+            else{
+                $this->notify(sprintf('Unable to remove <b>%s</b>',$tier),'warning');
+            }
+        }
         $this->put('role',$role)->put('tier',$tier);
-        $this->notify(strlen($role) ?
-                sprintf('%s.%s removed',$tier,$role) :
-                sprintf('%s removed!',$tier));
         return true;
     }
     /**
@@ -342,13 +393,25 @@ class AjaxController extends Controller{
     protected function addAction(){
         $tier = $this->tier;
         $role = $this->role;
-        if(strlen($role) && strlen($tier)){
-            $this->put('role',$role)->put('tier',$tier);
-            $td = $this->manager()->tier($tier);
-            if( $td && $td->add($role,true)) {
-                $this->notify(sprintf('%s saved into %s',$role,$tier));
-                return true;
-            }
+        if( !$tier ){
+            $this->notify(sprintf('Empty tier <b>%s</b>',$tier),'error');
+            return false;
+        }
+        if (!$role) {
+            $this->notify(sprintf('Empty role <b>%s</b>', $role), 'error');
+            return false;
+        }
+        $this->put('role', $role)->put('tier', $tier);
+        $td = $this->manager()->tier($tier);
+        if (is_null($td)) {
+            $this->notify(sprintf('Invalid tier <b>%s</b>', $tier), 'error');
+            return false;
+        }
+        if ($td->add($role, true)) {
+            $this->notify(sprintf('<b>%s</b> saved into <b>%s</b>', $role, $tier));
+            return true;
+        } else {
+            $this->notify(sprintf('Cannot add role <b>%s</b> to tier <b>%s</b>', $role, $tier), 'warning');
         }
         return false;
     }
@@ -398,11 +461,41 @@ class AjaxController extends Controller{
      * @return bool
      */
     protected function listAction() {
-        $tiers = array();
-        foreach ( $this->data()->tiers(true) as $tier ){
-            $tiers[$tier->tier()] = $tier->roles();
+        $list = array();
+        $tiers = $this->manager()->tiers(true);
+        foreach ( $tiers as $tier ){
+            $list[$tier->tier()] = $tier->roles();
         }
-        $this->fill(array('tiers'=>$tiers));
+        $this->fill(array('tiers'=>$list));
+        return true;
+    }
+}
+/**
+ * TEst
+ */
+class TestController extends Controller{
+    /**
+     * @return boolean
+     */
+    protected function addAction(){
+        $tier = $this->tier;
+        $role = $this->role;
+        $content = $this->manager()->tier($tier);
+        var_dump($content);
+        $content->add($role, true);
+        
+        return true;
+    }
+    /**
+     * @return boolean
+     */
+    protected function dropAction(){
+        $tier =  $this->tier;
+        $role = $this->role;
+        $td = $this->manager()->tier($tier);
+        var_dump($td);
+        $td->drop($role);
+        var_dump($td);
         return true;
     }
 }
@@ -488,6 +581,12 @@ class View{
                 return false;
         }
         return array_key_exists($name,$this->_attributes) ? $this->_attributes[$name] : '';
+    }
+    /**
+     * @return string
+     */
+    protected function getNonce(){
+        return wp_nonce_field('coder_nonce');
     }
     /**
      * @return String
