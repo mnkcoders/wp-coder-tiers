@@ -233,7 +233,29 @@ class Tier{
      * @return boolean
      */
     public function add($role = '' , $save = false){
-        if(strlen($role) && $role !== $this->tier() && !$this->has($role)){
+        if( empty($role)){
+            CoderTiers::instance()->notify( sprintf('Empty role',), 'warning');
+            return false;
+        }
+        if( $role === $this->tier()){
+            CoderTiers::instance()->notify(
+                    sprintf('<b>%s</b> cannot contain itself',$this->tier()),
+                    'warning');
+            return false;
+        }
+        if($this->can($role)){
+            CoderTiers::instance()->notify(
+                    sprintf('<b>%s</b> already can do <b>%s</b>',$this->tier(),$role),
+                    'warning');
+            return false;
+        }
+        if($this->hasTarget($role)){
+            CoderTiers::instance()->notify(
+                    sprintf('Cannot bind recursive roles to <b>%s</b>',$role),
+                    'warning');
+            return false;
+        }
+        if(strlen($role)){
             $this->_roles[] = $role;
             if( $save) {
                 return $this->manager()->db()->save(
@@ -251,7 +273,7 @@ class Tier{
      * @return boolean
      */
     public function drop( $role = '' , $save = false ){
-        if(strlen($role) && $this->has($role)){
+        if(strlen($role)){
             $roles = array();
             foreach($this->_roles as $r ){
                 if( $role !== $r){ $roles[] = $r; }
@@ -286,7 +308,14 @@ class Tier{
     public function listRoles(){
         return $this->roles();
     }
-
+    /**
+     * @param string $role
+     * @return boolean
+     */
+    public function hasTarget( $role = ''){
+        $target = $this->manager()->tier($role);
+        return $target ? $target->can($this->tier())  :false;
+    }
     
     /**
      * @return \CODERS\Tiers\CoderTiers

@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
 
-    CoderTiers.create('tier-list','coder-tiers-log');
+    CoderTiers.create('tier-list', 'coder-tiers-log');
 
 });
 
@@ -21,15 +21,15 @@ class CoderTiers {
             return CoderTiers.__instance;
         }
         CoderTiers.__instance = this;
-        this.initialize(container,log);
-        console.log(this);
+        this.initialize(container, log);
+        //console.log(this);
     }
     /**
      * @param {String} container
      */
-    initialize(container= '',log ='') {
+    initialize(container = '', log = '') {
         this._tiers = [];
-        this._view = new CoderView(container,log);
+        this._view = new ListView(container, log);
         this._client = new CoderClient(CoderTierApi || null);
         this.populate();
     }
@@ -46,7 +46,7 @@ class CoderTiers {
     }
     /**
      * UL list element to hold all tiers
-     * @returns {CoderView}
+     * @returns {ListView}
      */
     view() { return this._view; }
     /**
@@ -99,7 +99,7 @@ class CoderTiers {
      * @returns {CoderTiers}
      */
     static create(content = '', log = '') {
-        return new CoderTiers(content,log);
+        return new CoderTiers(content, log);
     }
 }
 /**
@@ -239,7 +239,14 @@ class CoderClient {
             ]
         };
     }
-
+    /**
+     * @param {String} tier 
+     * @param {String} move 
+     * @returns {CoderClient}
+     */
+    sort( tier = '' , move = 'up') {
+        return this.request({ 'task': 'sort' ,'tier': tier, 'move': move || 'up' });
+    }
 
     /**
      * @todo implement server call and response
@@ -301,100 +308,29 @@ class CoderClient {
         return this.request({ 'task': 'list' }, callback);
     }
 }
+
 /**
- * 
+ * Base View class
  */
 class CoderView {
     /**
-     * @param {String} content
-     * @param {String} log
+     * 
      */
-    constructor(content = '' , log = '') {
-        this._content = [...document.getElementsByClassName(content)][0] || null;
-        this._page = [...document.getElementsByClassName(log)][0] || null;
+    constructor() {
         this.initialize();
     }
-
+    /**
+     * 
+     */
     initialize() {
-        //setup here all required events bound to the list element (content) if required
+        //override
     }
-    /**
-     * @param {String} message 
-     * @param {String} type 
-     * @returns {CoderView}
-     */
-    log( message = '' , type = 'info' ) {
-        const frame = this.page();
-        if (frame) {
-            const content = this.html('div', { 'class': `notice is-dismissible ${type}` }, message);
-            frame.prepend(content);
-            setTimeout(() => content.remove(), 2000);
-        }
-        return this;
-    }
-
-    page(){ return this._page; }
     /**
      * @returns {Element}
      */
-    content() { return this._content; }
-    /**
-     * @returns {Boolean}
-     */
-    ready(){return this.content() !== null; }
-    /**
-     * Get the list's items to sync the view's contents
-     * @returns {Element[]}
-     */
-    list() { return this.content() && Array.from(this.content().children) || []; }
-    /**
-     * List all tiers in the list view
-     * @returns {String[]}
-     */
-    tiers() { return this.list().map(item => item.getAttribute('data-tier')); }
-    /**
-     * @param {String} tier 
-     * @returns {Element}
-     */
-    tier(tier = '') {
-        return tier && this.list().find(item => item.getAttribute('data-tier') === tier) || null;
-    }
-    /**
-     * List a tier's roles in the list view
-     * @param {String} tier 
-     * @returns {String[]}
-     */
-    roles(tier = '') {
-        const item = this.list().find(item => item.getAttribute('data-tier') === tier) || null;
-        return item && item.children().map(t => t.getAttribute('data-role') || '').filter(t => !!t);
-    }
-    /**
-     * @param {String} tier 
-     * @returns {Element[]}
-     */
-    roles(tier = '') {
-        const item = this.tier(tier);
-        return item &&
-            Array.from(item.getElementsByClassName('role'))
-                .filter(item => !!item.getAttribute('data-role')) || [];
-    }
-    /**
-     * @param {String} tier 
-     * @param {String} role 
-     * @returns {CoderClient}
-     */
-    remove(tier = '') {
-        const tierdata = tier.split('.');
-        if (tierdata.length > 1) {
-            this.roles(tierdata[0])
-                .filter(item => item.getAttribute('data-role') === tier)
-                .forEach(item => item.remove());
-        }
-        else {
-            const t = this.tier(tierdata[0]);
-            t && t.remove();
-        }
-        return this;
+    render() {
+        //override
+        return this.html('div', { 'class': 'empty' }, '');
     }
 
 
@@ -420,111 +356,136 @@ class CoderView {
      * @param {String} target 
      * @returns {String}
      */
-    link(action = '', target = '') {
+    ___link(action = '', target = '') {
         const url = CoderTiers.instance().client().url();
         return `${url}&action=${action || 'default'}&target=${target}`;
     }
     /**
-     * @param {String} tier 
+     * @param {Object} request
+     * @param {String|Element} content 
+     * @param {String} className 
+     * @param {String} target _self|_blank
      * @returns {Element}
      */
-    linkRemove(tier = '') {
-        const link = this.link('remove', tier);
-        const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
-        return this.html('a',
-            { 'class': 'remove right', 'href': link, 'target': '_self', 'data-tier': tier },
-            icon);
+    link(request = {}, content, className = '', target = '_self') {
+        const base = CoderTiers.instance().client().url();
+        const data = Object.keys(request)
+            .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(request[key])}`);
+        const url = data.length ? `${base}&${data.join('&')}` : base;
+        return this.html('a', { 'class': className, 'href': url, 'target': target }, content || '');
     }
     /**
-     * @param {String} tier 
+     * @param {String} action 
+     * @param {Element|String} content 
+     * @param {String} className 
      * @returns {Element}
      */
-    buttonRemove(tier = '') {
-        const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
-        const button = this.html('span',
-            { 'class': 'remove right', 'data-tier': tier }, icon);
-        const view = this;
-        button.addEventListener('click', function (e) {
-            e.preventDefault();
-            const tier = (this.getAttribute('data-tier') || '').toString();
-            CoderTiers.server().remove(tier, '', r => {
-                console.log(r);
-                view.remove(r.tier || '');
-            });
-            return true;
-        });
+    action(action = '', content, className = '') {
+        return this.link({ action: action }, content, className, '_self');
+    }
+}
 
-        return button;
+
+/**
+ * 
+ */
+class ListView extends CoderView {
+    /**
+     * @param {String} content
+     * @param {String} log
+     */
+    constructor(content = '', log = '') {
+        super();
+        this._content = [...document.getElementsByClassName(content)][0] || null;
+        this._page = [...document.getElementsByClassName(log)][0] || null;
     }
+
+    /**
+     * @param {String} message 
+     * @param {String} type 
+     * @returns {ListView}
+     */
+    log(message = '', type = 'info') {
+        const frame = this.page();
+        if (frame) {
+            const content = this.html('div', { 'class': `notice is-dismissible ${type}` }, message);
+            frame.prepend(content);
+            setTimeout(() => content.remove(), 2000);
+        }
+        return this;
+    }
+
+    page() { return this._page; }
+    /**
+     * @returns {Element}
+     */
+    content() { return this._content; }
+    /**
+     * @returns {Boolean}
+     */
+    ready() { return this.content() !== null; }
+    /**
+     * Get the list's items to sync the view's contents
+     * @returns {Element[]}
+     */
+    items() { return this.content() && Array.from(this.content().children) || []; }
     /**
      * @param {String} tier 
      * @returns {Element}
      */
-    tierbox(tier = '') {
-        const element = this.html('span',
-            { draggable: 'true', 'class': 'tier button-primary', 'data-tier': tier },
-            tier);
-        //add drag drop events
-        element.addEventListener("dragstart", e => {
-            e.dataTransfer.setData("text/plain", element.dataset.tier);
-            e.dropEffect = "move";
-            element.classList.add("dragging");
-        });
-        element.addEventListener("dragend", e => {
-            element.classList.remove("dragging");
-        });
-        return element;
+    get(tier = '') {
+        return tier && this.items().find(item => item.getAttribute('data-tier') === tier) || null;
     }
     /**
-     * @param {String} role 
-     * @returns {Element}
+     * @param {String} tier 
+     * @param {String} direction 
      */
-    rolebox(role = '', tier = '') {
-        const roledata = tier && `${tier}.${role}` || role;
-        const content = this.html('span', { 'class': 'role button', 'data-role': roledata }, role);
-        const view = this;
-        content.addEventListener('click', function (e) {
-            e.preventDefault();
-            const content = (this.getAttribute('data-role') || '').toString();
-            const td = content.split('.');
-            CoderTiers.server().remove(td[0], td[1] || '', r => {
-                r.tier && r.role && view.remove(tier + '.' + role);
-            });
-            return true;
-        });
-        return content
+    move(tier = '', direction = 'up') {
+        //
     }
     /**
-     * @param {String} role 
-     * @returns {Element}
+     * List a tier's roles in the list view
+     * @param {String} tier 
+     * @returns {String[]}
      */
-    itembox(role = '') {
-        const item = this.html('li', { 'class': 'item', 'data-tier': role });
-        item.addEventListener("dragover", function (e) {
-            e.preventDefault(); // REQUIRED
-            e.dataTransfer.dropEffect = "move";
-            const role = e.dataTransfer.getData("text/plain") || '';
-            const tier = this.dataset.tier || ''; // target tier
-            if (role !== tier) {
-                this.classList.add("drag-over");
-            }
-        });
-        item.addEventListener("dragleave", function (e) {
-            this.classList.remove("drag-over");
-        });
-        item.addEventListener("drop", e => {
-            e.preventDefault();
-            item.classList.remove("drag-over");
-            const role = e.dataTransfer.getData("text/plain") || '';
-            const tier = item.dataset.tier || ''; // target tier
-            if (tier !== role) {
-                CoderTiers.server().add(tier, role, r => {
-                    !!r._response && item.appendChild(this.rolebox(role, tier));
-                });
-            }
-        });
-        return item;
+    /*roles(tier = '') {
+        const item = this.list().find(item => item.getAttribute('data-tier') === tier) || null;
+        return item && item.children().map(t => t.getAttribute('data-role') || '').filter(t => !!t);
+    }*/
+    /**
+     * List all tiers in the list view
+     * @returns {String[]}
+     */
+    tiers() { return this.items().map(item => item.getAttribute('data-tier')); }
+    /**
+     * @param {String} tier 
+     * @returns {Element[]}
+     */
+    roles(tier = '') {
+        const item = this.get(tier);
+        return item &&
+            Array.from(item.getElementsByClassName('role'))
+                .filter(item => !!item.getAttribute('data-role')) || [];
     }
+    /**
+     * @param {String} tier 
+     * @param {String} role 
+     * @returns {CoderClient}
+     */
+    remove(tier = '') {
+        const tierdata = tier.split('.');
+        if (tierdata.length > 1) {
+            this.roles(tierdata[0])
+                .filter(item => item.getAttribute('data-role') === tier)
+                .forEach(item => item.remove());
+        }
+        else {
+            const t = this.get(tierdata[0]);
+            t && t.remove();
+        }
+        return this;
+    }
+  
     /**
      * @todo  implement drag-drop events on tiers and roles
      * @param {CoderTier} content
@@ -532,13 +493,7 @@ class CoderView {
      */
     add(content = null) {
         if (this.ready() && content instanceof CoderTier) {
-            const name = content.name();
-            const item = this.itembox(name);
-            const roles = content.roles().map(role => this.rolebox(role, name));
-
-            item.appendChild(this.tierbox(name));
-            roles.forEach(role => item.append(role));
-            item.appendChild(this.buttonRemove(name));
+            const item = new ItemView(content).render();
             this.content().appendChild(item);
             return true;
         }
@@ -548,15 +503,15 @@ class CoderView {
      * @param {String} tier 
      * @returns {Boolean}
      */
-    has(tier = '') { return !!this.tier(tier); }
+    has(tier = '') { return !!this.get(tier); }
     /**
      * Main event to handle the tier list from server's response
      * @todo implement update (refresh) or add new to the list
      * @param {CoderTier[]} content 
-     * @returns {CoderView}
+     * @returns {ListView}
      */
     refresh(content = [], clear = false) {
-        if(!this.ready()) { return this; } 
+        if (!this.ready()) { return this; }
         //remove non existing tiers
         clear && this.clear();
         content.forEach(tier => {
@@ -564,9 +519,11 @@ class CoderView {
             if (this.has(tier.name())) {
                 //update
                 this.roles(tier.name()).forEach(e => e.remove());
+                const container = this.get(tier.name());
                 tier.roles()
                     .map(role => role.name())
-                    .map(role => this.rolebox(role, tier.name()))
+                    //.map(role => this.rolebox(role, tier.name()))
+                    .map(role => new RoleView(tier.name(), role).render())
                     .forEach(item => container.appendChild(item));
             }
             else {
@@ -580,20 +537,243 @@ class CoderView {
      * @todo Implement remove
      * Remove all or selected items in the list
      * @param {String[]} tiers 
-     * @returns {CoderView}
+     * @returns {ListView}
      */
     clear(tiers = []) {
         if (tiers.length) {
             //remove all children in tiers list
-            tiers.map(tier => this.tier(tier)).forEach(t => t && t.remove());
+            tiers.map(tier => this.get(tier)).forEach(t => t && t.remove());
         }
         else if (this.content()) {
             //reset
-            this.tiers().forEach(t => t.remove());
+            this.items().forEach(t => t.remove());
         }
         return this;
     }
 }
 
+/**
+ * 
+ */
+class ItemView extends CoderView {
+    /**
+     * @param {CoderTier} tier 
+     */
+    constructor(tier = null) {
+        super();
+        this._tier = tier;
+    }
+    /**
+     * @param {Element} element 
+     */
+    over(element){
+        element.addEventListener("dragover", function (e) {
+            e.preventDefault(); // REQUIRED
+            e.dataTransfer.dropEffect = "move";
+            const role = e.dataTransfer.getData("text/plain")
+                || e.dataTransfer.getData("text")
+                || '';
+            const tier = this.dataset.tier || ''; // target tier
+            //console.log(`role: ${role} | tier: ${tier}`);
+            if (role !== tier) {
+                this.classList.add("drag-over");
+            }
+        });
+    }
+    /**
+     * @param {Element} element 
+     */
+    drop( element){
+        element.addEventListener("drop", e => {
+            e.preventDefault();
+            element.classList.remove("drag-over");
+            const role = e.dataTransfer.getData("text/plain")
+                || e.dataTransfer.getData("text")
+                || '';
+            const tier = element.dataset.tier || ''; // target tier
+            if (tier !== role) {
+                CoderTiers.server().add(tier, role, r => {
+                    !!r._response && element.appendChild(new RoleView(tier,role).render());
+                    //!!r._response && element.appendChild(this.rolebox(role, tier));
+                });
+            }
+        });
+    }
+    /**
+     * @param {Element} element 
+     */
+    leave( element){
+        element.addEventListener("dragleave", function (e) {
+            this.classList.remove("drag-over");
+        });
+    }
+    /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    linkRemove(tier = '') {
+        const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
+        const link = this.action('remove', icon, 'remove right');
+        link.setAttribute('data-tier', tier);
+        return link;
+    }    
+
+    /**
+     * @param {String} tier 
+     * @returns {Element}
+     */
+    removeButton(tier = '') {
+        const icon = this.html('span', { 'class': 'dashicons dashicons-remove' });
+        const element = this.html('span',{ 'class': 'remove right', 'data-tier': tier }, icon);
+        element.addEventListener('click', function (e) {
+            e.preventDefault();
+            const tier = (this.getAttribute('data-tier') || '').toString();
+            CoderTiers.server().remove(tier, '', r => {
+                r._response && CoderTiers.instance().view().remove(tier);
+            } );
+            return true;
+        });
+        return element;
+    }      
+    /**
+     * @param {String} move 
+     * @returns {Element}
+     */
+    sortButton(move = 'up') {
+        const iconClass = move === 'up' ? 'dashicons-arrow-up-alt2' : 'dashicons-arrow-down-alt2';
+        const icon = this.html('span', { 'class': `dashicons ${iconClass}` });
+        const tier = this._tier && this._tier.name() || '';
+        const element = this.html('span', { 'class': `sort sort-${move}`, 'data-tier': tier }, icon);
+        element.setAttribute('data-tier', tier);
+        element.addEventListener('click', function (e) {
+            e.preventDefault();
+            const tier = (this.getAttribute('data-tier') || '').toString();
+            const action = move === 'up' ? 'up' : 'down';
+            CoderTiers.server().sort(tier, action, r => {
+                r._response && CoderTiers.instance().view().move(tier, action);
+            });
+            return true;
+        });
+        return element;
+    }
+    /**
+     * @returns {Element}
+     */
+    render() {
+        const tier = this._tier;
+        if (!(tier instanceof CoderTier)) {
+            return this.html('div', { 'class': 'empty' }, 'No Tier Data');
+        }
+        const name = tier.name();
+        const element = this.html('li', { 'class': 'item', 'data-tier': name });
+        this.drop(element);
+        this.over(element);
+        this.leave(element);
+
+        //const element = new TierView(name).render();
+        element.appendChild(new TierView(name).render());
+        tier.roles()
+            .map(role => new RoleView(name,role).render())
+            .forEach(role => element.append(role));
+        
+        //implemend drag and drop to sort tier blocks
+        //element.appendChild(this.sortButton('up'));
+        element.appendChild(this.removeButton(name));
+        //element.appendChild(this.sortButton('down'));
+        return element;
+    }
+}
+/**
+ *  
+ */
+class TierView extends CoderView {
+    /**
+     * @param {String} tier 
+     */
+    constructor( tier = '' ) {
+        super();
+        this._tier = tier || '';
+    }
+    /**
+     * @param {Element} element 
+     */
+    drag( element ){
+        //add drag drop events
+        element.addEventListener("dragstart", e => {
+            try{
+                e.dataTransfer.setData("text/plain", element.dataset.tier);
+                //e.dataTransfer.setData("text", element.dataset.tier);
+                //e.dropEffect = "move";
+                e.dataTransfer.effectAllowed = "move";
+                //console.log(`${e.dataTransfer.effectAllowed}: ${element.dataset.tier || ''}`);
+                element.classList.add("dragging");
+            }
+            catch(err){
+                CoderTiers.instance().view().log('Drag operation not supported in this browser.', 'error');
+            }
+        });
+    }
+    /**
+     * @param {Element} element 
+     */
+    leave( element){
+        element.addEventListener("dragend", e => {
+            element.classList.remove("dragging");
+            try{
+                //e.dataTransfer.setData("text/plain", '');
+                e.dataTransfer.dropEffect = "none";
+            }
+            catch(err){
+                CoderTiers.instance().view().log(err.toString(), 'error');
+            }
+        });
+    }
+
+    /**
+     * @returns {Element}
+     */
+    render(){
+        const tier = this._tier;
+        const element = this.html('span',
+            { draggable: 'true', 'class': 'tier button-primary', 'data-tier': tier },
+            tier);
+        this.drag(element);
+        this.leave(element);
+        return element;
+    }
+}
+/**
+ * 
+ */
+class RoleView extends CoderView {
+    /**
+     * @param {String} tier 
+     * @param {String} role
+     */
+    constructor(tier = '' , role = ''){
+        super();
+        this._tier = tier || '';
+        this._role = role || '';
+    }
+    /**
+     * @returns {Element}
+     */
+    render() {
+        const tier = this._tier;
+        const role = this._role;
+        const roledata = tier && `${tier}.${role}` || role;
+        const element = this.html('span', { 'class': 'role button', 'data-role': roledata }, role);
+        element.addEventListener('click', function (e) {
+            e.preventDefault();
+            const content = (this.getAttribute('data-role') || '').toString();
+            const td = content.split('.');
+            CoderTiers.server().remove(td[0], td[1] || '', r => {
+                r.tier && r.role && element.remove();
+            });
+            return true;
+        });
+        return element
+    }
+}
 
 

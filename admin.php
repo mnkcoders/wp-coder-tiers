@@ -31,21 +31,9 @@ add_action('wp_ajax_nopriv_coder_tiers', function(){
 });
 
 add_action('admin_enqueue_scripts',function(){
-    $style = sprintf('%shtml/content/style.css', CODER_TIERS_URL);
-    $style_path = sprintf('%shtml/content/style.css', CODER_TIERS_DIR);
     
-    $script = sprintf('%shtml/content/script.js', CODER_TIERS_URL);
-    $script_path = sprintf('%shtml/content/script.js', CODER_TIERS_DIR);
-    // Register and enqueue CSS
-    wp_enqueue_style('tiers-admin-style', $style, [], filemtime($style_path));
-    // Register and enqueue JS
-    wp_enqueue_script('tiers-admin-script', $script, ['jquery'], filemtime($script_path), true);
+    \CODERS\Tiers\Admin\View::load(filter_input(INPUT_GET, 'page') ?? '');
 
-    // Optional: Pass variables to JS
-    wp_localize_script('tiers-admin-script', 'CoderTierApi', [
-        'url' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('coder_nonce')
-    ]);
 });
 
 
@@ -61,10 +49,6 @@ class Controller {
     //const AJAX = 4;
     const SERVER = INPUT_SERVER;
     
-    /**
-     * @var array
-     */
-    private static $_log = array();
     /**
      * @var array
      */
@@ -146,7 +130,7 @@ class Controller {
      * @return string
      */
     public static function log(){
-        return array_merge(self::$_log,self::manager()->log()); 
+        return self::manager()->log();
     }
     /**
      * @param string $content
@@ -154,7 +138,7 @@ class Controller {
      * @return \CODERS\Tiers\Admin\Controller
      */
     public function notify($content = '' , $type = 'info'){
-        self::$_log[] = array('content' => $content , 'type' => $type );
+        self::manager()->notify($content,$type);
         return $this;
     }
 
@@ -264,7 +248,7 @@ class Controller {
             default:
                 return array();
         }
-   }    
+   }
 }
 /**
  * Default view controller
@@ -410,8 +394,6 @@ class AjaxController extends Controller{
         if ($td->add($role, true)) {
             $this->notify(sprintf('<b>%s</b> saved into <b>%s</b>', $role, $tier));
             return true;
-        } else {
-            $this->notify(sprintf('Cannot add role <b>%s</b> to tier <b>%s</b>', $role, $tier), 'warning');
         }
         return false;
     }
@@ -645,6 +627,28 @@ class View{
         }
         printf('<!-- INVALID VIEW %s -->',$name);
         return false;
+    }
+    /**
+     * 
+     */
+    public static function load($page = '') {
+        if ($page === 'coder-tiers') {
+            $style = sprintf('%shtml/content/style.css', CODER_TIERS_URL);
+            $style_path = sprintf('%shtml/content/style.css', CODER_TIERS_DIR);
+
+            $script = sprintf('%shtml/content/script.js', CODER_TIERS_URL);
+            $script_path = sprintf('%shtml/content/script.js', CODER_TIERS_DIR);
+            // Register and enqueue CSS
+            wp_enqueue_style('tiers-admin-style', $style, [], filemtime($style_path));
+            // Register and enqueue JS
+            wp_enqueue_script('tiers-admin-script', $script, ['jquery'], filemtime($script_path), true);
+
+            // Optional: Pass variables to JS
+            wp_localize_script('tiers-admin-script', 'CoderTierApi', [
+                'url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('coder_nonce')
+            ]);
+        }
     }
 }
 

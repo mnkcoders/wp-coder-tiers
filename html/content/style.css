@@ -3,7 +3,14 @@
 #wpbody-content{
     
 }
-
+.coder-tiers-log {
+    position: relative;
+    width: 100%;
+}
+.coder-tiers-log > .notice{
+    position: absolute;
+    top: 0;
+}
 .coder-tiers .tierform {
     padding: 16px;
     margin: 40px 0;
@@ -73,12 +80,17 @@ ul.tier-list li.item .tier:hover {
     background: #e9ecef;
 }
 
+ul.tier-list li.item > .sort {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
 ul.tier-list li.item > .remove {
     transition: ease-in all 0.2s;
     padding: 10px;
     margin: 0;
     position: absolute;
-    top: 0; right: 0;
+    bottom: 0; right: 0;
 }
 ul.tier-list li.item > .remove > .dashicons{ opacity: 0.2; transition: ease-in all 0.2s; }
 ul.tier-list li.item > .remove:hover > .dashicons{
